@@ -121,6 +121,16 @@ def write_session(rows, project_cwd, sid):
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
 
 
+def own_rng(fn):
+    """Runs `fn` with a separate seeded generator in place of the shared one."""
+    global rng
+    saved, rng = rng, random.Random(901)
+    try:
+        return fn()
+    finally:
+        rng = saved
+
+
 def loop_session():
     """A finished, self-paced /loop over the payments tests: five iterations, one sub-agent, and a test run in each.
 
@@ -243,10 +253,9 @@ def main():
             rows, _ = session_rows(sid, cwd, start, n, plan, PROJECTS[name]["skills"], compact_at=rng.randint(40, 70) if n > 75 else None)
             write_session(rows, cwd, sid)
 
-    # Drawn from a saved state and put back, so adding this session does not change the other sessions' numbers.
-    state = rng.getstate()
-    loop_session()
-    rng.setstate(state)
+    # The loop session draws from its own generator, so adding it neither changes the other sessions' numbers nor repeats
+    # their ids (restoring the shared generator's state would hand the next session the same session id and overwrite this one).
+    own_rng(loop_session)
 
     # Three open sessions, each tied to a live pid.
     live = [

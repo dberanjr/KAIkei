@@ -29,6 +29,8 @@ struct TimelineDensity: Equatable {
 
     var ribbonHeight: CGFloat { kind == .compact ? 16 : 22 }
     static let laneHeight: CGFloat = 14
+    /// The suggestions bar carries 11-point icons, so it is a little taller than the prompt lane.
+    static let adviceHeight: CGFloat = 17
     var mainHeight: CGFloat { (kind == .compact ? 150 : kind == .standard ? 190 : 250) * scale }
     var panelHeight: CGFloat { (kind == .full ? 100 : kind == .standard ? 78 : 60) * scale }
     var cumulativeHeight: CGFloat { (kind == .compact ? 56 : kind == .standard ? 72 : 90) * scale }
@@ -88,6 +90,9 @@ struct SessionTimelineView: View {
     /// Loop, sub-agent, test and plugin lanes for this session. Cached in the store, so a redraw does not rebuild them.
     private var lanes: FeatureLanes { store.featureLanes(sessionID: sessionID, timeline: timeline) }
 
+    /// Where the compact advisor would have spoken, for the suggestions bar. Cached in the store.
+    private var advice: [AdviceMarker] { store.adviceMarkers(sessionID: sessionID, timeline: timeline) }
+
     private func height(of series: TimelineSeries) -> CGFloat { series == .cumulative ? density.cumulativeHeight : density.panelHeight }
 
     /// The vertical layout, described once: the same items build the views and give the pointer its bands.
@@ -95,8 +100,9 @@ struct SessionTimelineView: View {
         var items: [StackItem] = [
             .init(kind: .header, height: 20), .init(kind: .ribbon, height: density.ribbonHeight),
             .init(kind: .prompts, height: TimelineDensity.laneHeight),
-            .init(kind: .header, height: density.headerHeight), .init(kind: .data, height: density.mainHeight),
         ]
+        if !advice.isEmpty { items.append(.init(kind: .advice, height: TimelineDensity.adviceHeight)) }
+        items += [.init(kind: .header, height: density.headerHeight), .init(kind: .data, height: density.mainHeight, overlay: true)]
         for series in separate { items += [.init(kind: .header, height: density.headerHeight), .init(kind: .data, height: height(of: series))] }
         items += lanes.stackItems(density: density)
         return TimelineStackLayout(items: items, spacing: TimelineDensity.spacing)
@@ -229,8 +235,15 @@ struct SessionTimelineView: View {
                 HStack(spacing: 6) { ForEach(TimelineSeries.allCases) { series in chip(series, g) } }
                 VStack(alignment: .leading, spacing: 5) { ForEach(TimelineSeries.allCases) { series in chip(series, g) } }
             }
+            promptOverlayToggle
             if lanes.present.contains(where: \.canOverlay) { featureOverlayToggle }
         }
+    }
+
+    /// Draws a line at every prompt on the context chart. Off by default; the prompt bar above always shows them.
+    private var promptOverlayToggle: some View {
+        Toggle(isOn: $store.promptOverlayOn) { Text("Overlay prompts on the context chart").font(.caption.weight(.semibold)) }
+            .toggleStyle(.switch).controlSize(.mini)
     }
 
     /// Draws the loop, sub-agent and test markers on the context chart too. Off by default; the lanes below always show them.
@@ -311,9 +324,10 @@ struct SessionTimelineView: View {
     private func chartStack(_ g: TimelineGeometry) -> some View {
         let height = density.headerHeight
         return VStack(spacing: TimelineDensity.spacing) {
-            sectionLabel("Model in use, and the prompts you typed", blurb: density == .compact ? "" : "bar colors are models; each tick is a prompt", height: 20, divider: false)
+            sectionLabel("Model in use, and the prompts you typed", blurb: density == .compact ? "" : (advice.isEmpty ? "bar colors are models; each tick is a prompt" : "bar colors are models; each tick is a prompt; each icon is a suggestion"), height: 20, divider: false)
             modelRibbon(g)
             promptLane(g)
+            if !advice.isEmpty { adviceLane(g) }
             panelHeader("Context window", color: Theme.ramp[2], blurb: density == .compact ? "" : "tokens held in the conversation each call", height: height) { mainLegend(g) }
             mainChart(g)
             ForEach(separate) { series in
@@ -333,7 +347,7 @@ struct SessionTimelineView: View {
         .overlay { pointerSurface(g) }
         // The crosshair and cards live in an overlay that observes the hover model, so the charts above never redraw.
         .overlay(alignment: .topLeading) {
-            TimelineHoverOverlay(hover: hover, timeline: timeline, geometry: g, bands: layout.bands, lanes: lanes)
+            TimelineHoverOverlay(hover: hover, timeline: timeline, geometry: g, bands: layout.bands, lanes: lanes, advice: advice)
         }
     }
 
@@ -371,7 +385,8 @@ struct SessionTimelineView: View {
             hover.pointerLeft()
             return
         }
-        let target = TimelineHitTester.target(atX: Double(point.x), y: Double(point.y), width: width, bands: bands, geometry: g, lanes: lanes)
+        let target = TimelineHitTester.target(atX: Double(point.x), y: Double(point.y), width: width, bands: bands, geometry: g, lanes: lanes,
+            overlay: store.featureOverlayOn ? store.featureOverlayLanes : [], advice: advice)
         let x = TimelineHitTester.x(atPixel: Double(point.x), width: width, geometry: g)
         hover.pointerMoved(to: point, target: target, focus: g.nearestCall(to: x))
     }
@@ -508,6 +523,20 @@ struct SessionTimelineView: View {
         .frame(height: TimelineDensity.laneHeight)
     }
 
+    /// An event bar of the moments the advisor would have suggested compacting or clearing. Hover an icon for what it said.
+    private func adviceLane(_ g: TimelineGeometry) -> some View {
+        let shown = advice.filter { inView(g.x(time: $0.time), g) }
+        return Chart {
+            ForEach(shown) { m in
+                PointMark(x: .value("Suggestion", g.x(time: m.time)), y: .value("Row", 0.5)).opacity(0)
+                    .annotation(position: .overlay) { laneIcon(m.level.symbol, m.level.color) }
+            }
+        }
+        .panel(g, ticks: g.ticks(maxTicks: ticksWanted))
+        .chartYScale(domain: 0...1)
+        .frame(height: TimelineDensity.adviceHeight)
+    }
+
     // MARK: the context chart, with overlays
 
     private func mainChart(_ g: TimelineGeometry) -> some View {
@@ -539,6 +568,7 @@ struct SessionTimelineView: View {
             ForEach(overlaid) { series in
                 overlayLine(series, calls: scaled, top: top, peak: peak(of: series, g), base: base, g: g)
             }
+            if store.promptOverlayOn { promptRules(g) }
             if store.featureOverlayOn { featureOverlayMarks(lanes, selected: store.featureOverlayLanes, g: g, top: top) }
             eventRules(g, labels: density.showsLabels)
         }
@@ -696,6 +726,14 @@ struct SessionTimelineView: View {
 
     // MARK: shared marks
 
+    /// A faint dashed line at every prompt you typed, over the context chart.
+    @ChartContentBuilder private func promptRules(_ g: TimelineGeometry) -> some ChartContent {
+        ForEach(timeline.markers.filter { if case .prompt = $0.kind { inView(g.x(time: $0.time), g) } else { false } }) { m in
+            RuleMark(x: .value("Prompt", g.x(time: m.time)))
+                .foregroundStyle(Color.primary.opacity(0.35)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+        }
+    }
+
     /// Stretches where the cache had expired: from the moment the entry lapsed to the call that had to re-write it.
     @ChartContentBuilder private func expiredBands(_ g: TimelineGeometry, top: Double) -> some ChartContent {
         let calls = timeline.calls
@@ -778,31 +816,64 @@ struct TimelineReadout: View {
                 Text("Context \(Fmt.tokens(c.contextTokens)) (\(share)) · output \(Fmt.tokens(c.output)) · \(Fmt.money(c.cost)) · total \(Fmt.money(c.cumulativeCost))")
                     .font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1).minimumScaleFactor(0.75)
             } else {
-                Text("Context \(Fmt.tokens(c.contextTokens)) (\(share) of window) = \(Fmt.tokens(c.cacheRead)) cache read + \(Fmt.tokens(c.cacheWrite)) cache write + \(Fmt.tokens(c.freshInput)) uncached")
-                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                Text(costLine(c)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                Text(contextLine(c)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                detailTile(c, share: share, window: window)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func costLine(_ c: CallPoint) -> String {
+    /// Everything about the call in one tile: context, output, cost split by what was billed, and timing.
+    private func detailTile(_ c: CallPoint, share: String, window: Int) -> some View {
         let p = c.costParts
-        let thinking = c.thinkingTokens > 0 ? " (\(Fmt.tokens(c.thinkingTokens)) thinking)" : ""
-        return "Output \(Fmt.tokens(c.output))\(thinking) · \(Fmt.money(c.cost)) = read \(Fmt.money(p.cacheRead)) + write \(Fmt.money(p.cacheWrite)) + output \(Fmt.money(p.output)) + input \(Fmt.money(p.input)) · session total \(Fmt.money(c.cumulativeCost))"
+        let timing: (String, String) = {
+            guard let gap = c.idleGap else { return ("first call", "") }
+            return (gap < 60 ? "\(Int(gap))s" : Fmt.duration(Int(gap)), "since the previous call")
+        }()
+        let cacheState = c.cacheExpired ? "expired, re-written"
+            : c.cacheRead > 0 ? "hit \(Fmt.percent(Double(c.cacheRead) / Double(max(c.contextTokens, 1)) * 100))" : "cold"
+        return VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 18, alignment: .top)], alignment: .leading, spacing: 12) {
+                stat("Context", Fmt.tokens(c.contextTokens), "\(share) of \(Fmt.tokens(window))", [
+                    ("Cache read", Fmt.tokens(c.cacheRead)), ("Cache write", Fmt.tokens(c.cacheWrite)), ("Uncached input", Fmt.tokens(c.freshInput))])
+                stat("Output", Fmt.tokens(c.output), c.thinkingTokens > 0 ? "\(Fmt.tokens(c.thinkingTokens)) thinking" : "", [])
+                stat("Cost of this call", Fmt.money(c.cost), "", [
+                    ("Cache reads", Fmt.money(p.cacheRead)), ("Cache writes", Fmt.money(p.cacheWrite)),
+                    ("Output", Fmt.money(p.output)), ("Input", Fmt.money(p.input))])
+                stat("Session so far", Fmt.money(c.cumulativeCost), "", [])
+                stat("Timing", timing.0, timing.1, [("Cache", cacheState)])
+            }
+            if let prompt = promptText(c) {
+                Text("Answering prompt \(c.turn): “\(prompt)”").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.045)))
     }
 
-    /// Idle gap, expiry and the prompt this call answered.
-    private func contextLine(_ c: CallPoint) -> String {
-        var parts: [String] = []
-        if let gap = c.idleGap { parts.append("\(gap < 60 ? "\(Int(gap))s" : Fmt.duration(Int(gap))) since the previous call") }
-        if c.cacheExpired { parts.append("cache had expired, so the context was re-written") }
-        if c.turn > 0 {
-            let prompts = timeline.markers.compactMap { m -> String? in if case .prompt(let p) = m.kind { p } else { nil } }
-            if c.turn <= prompts.count { parts.append("answering prompt \(c.turn): “\(prompts[c.turn - 1])”") }
+    private func stat(_ label: String, _ value: String, _ note: String, _ rows: [(String, String)]) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(value).font(.title3.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                if !note.isEmpty { Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+            }
+            ForEach(rows.indices, id: \.self) { i in
+                HStack(spacing: 6) {
+                    Text(rows[i].0).foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    Text(rows[i].1).monospacedDigit()
+                }
+                .font(.caption2)
+            }
         }
-        return parts.joined(separator: " · ")
+    }
+
+    /// The prompt this call answered, if there is one.
+    private func promptText(_ c: CallPoint) -> String? {
+        guard c.turn > 0 else { return nil }
+        let prompts = timeline.markers.compactMap { m -> String? in if case .prompt(let p) = m.kind { p } else { nil } }
+        return c.turn <= prompts.count ? prompts[c.turn - 1] : nil
     }
 }
 
@@ -814,6 +885,7 @@ struct TimelineHoverOverlay: View {
     let geometry: TimelineGeometry
     let bands: [PanelBand]
     let lanes: FeatureLanes
+    let advice: [AdviceMarker]
 
     var body: some View {
         GeometryReader { box in
@@ -873,6 +945,8 @@ struct TimelineHoverOverlay: View {
             if let s = timeline.modelSpans.first(where: { $0.id == id }) { ModelSpanCard(span: s, timeline: timeline, width: width) }
         case .lane(let target):
             LaneCard(target: target, lanes: lanes, width: width)
+        case .advice(let id):
+            if let m = advice.first(where: { $0.id == id }) { AdviceCard(marker: m, width: width) }
         }
     }
 
@@ -887,6 +961,7 @@ struct TimelineHoverOverlay: View {
             case .call: 470
             case .modelSpan: 120
             case .lane: 150
+            case .advice: 170
             default: 130
             }
         }()
@@ -919,6 +994,9 @@ struct TimelineHoverOverlay: View {
             return CGPoint(x: TimelineHitTester.pixel(forX: mid, width: width, geometry: geometry), y: 10)
         case .lane:
             return CGPoint(x: width / 2, y: container.height - 40)
+        case .advice(let id):
+            let t = advice.first { $0.id == id }?.time ?? timeline.start
+            return CGPoint(x: TimelineHitTester.pixel(forX: geometry.x(time: t), width: width, geometry: geometry), y: 40)
         }
     }
 }

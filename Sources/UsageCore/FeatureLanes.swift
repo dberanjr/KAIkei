@@ -55,3 +55,10 @@ public struct FeatureLanes: Equatable, Sendable {
             plugins: plugins(timeline: timeline))
     }
 }
+
+/// Where the lanes' markers sit on the context chart, as a share of its height from the bottom. The overlay draws them
+/// there and the hit-tester looks for them there, so the two cannot disagree.
+public enum FeatureOverlayLayout {
+    public static let iconFraction = 0.93
+    public static let testDotFraction = 0.82
+}

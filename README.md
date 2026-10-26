@@ -32,7 +32,7 @@ cd KAIkei
 make install   # builds KAIkei.app and copies it to ~/Applications
 ```
 
-Or grab `KAIkei-0.2.0-macOS-arm64.zip` from the [latest release](https://github.com/dberanjr/KAIkei/releases/latest). The
+Or grab `KAIkei-0.2.1-macOS-arm64.zip` from the [latest release](https://github.com/dberanjr/KAIkei/releases/latest). The
 build is ad-hoc signed, not notarized, so on first launch right-click the app and choose **Open** (or run
 `xattr -dr com.apple.quarantine KAIkei.app`).
 
@@ -80,6 +80,13 @@ A session's detail page opens with a **context window and cost timeline** for de
   idle gap, tools, and any prompt or compaction in that slice);
 - quick cards (about 0.12 s) on the event bars: a prompt tick (what it cost to answer), a compaction or clear line (tokens
   freed, how long it took, what the next call cost) and a stretch of the model ribbon (calls, cost, context peak);
+- a **details tile** above the charts for the latest call (or the one under the pointer): the context split into cache read,
+  cache write and uncached input, the output, the cost split by what it was billed as, the session total so far, how long
+  since the previous call and whether the cache hit;
+- a **suggestions bar** under the prompt ticks: an icon (lightbulb, warning, snowflake) wherever KAIkei's compact advisor
+  would have suggested compacting, or noted that the cache had expired. They are replayed from the transcript at today's list
+  prices, so you can go back and see when a suggestion would have appeared; hover one for what it said;
+- an **Overlay prompts** switch that draws a faint dashed line at every prompt you typed over the context chart;
 - a Time / Calls switch (Time shows idle gaps; Calls spaces every response evenly for long sessions);
 - for an open session, a cost-based nudge: what carrying the context costs per call, what compacting would cost and
   save, whether the cache is warm, and the extra a cold cache would add to the next prompt.
@@ -100,7 +107,7 @@ as the charts above (a session that used none of them shows nothing extra):
 - **Plugins and skills**: one bar of cost by plugin, with the smaller ones folded into "other".
 
 The **Overlay lanes on the context chart** switch (off by default, remembered) draws the loop bands and decision icons,
-sub-agent runs and test-run dots on the context chart as well, with a checkbox per lane. Hover any element for its card:
+sub-agent runs (as a faint full-height wash) and test-run dots on the context chart as well, with a checkbox per lane. Hovering a test dot or a loop decision icon opens its card. Hover any element for its card:
 an iteration's cost, calls, tokens and how late it woke; a decision's delay and reason; a run's duration and cost; a test run's pass ratio.
 
 A `/goal` lane is not built yet: Claude Code does not document how a goal's outcome is written to the transcript, and no
@@ -158,7 +165,7 @@ entry, otherwise five minutes. Prompt text is kept in memory only, for a 100-cha
 <p align="center"><sub>A self-paced <code>/loop</code> over five iterations: the loop lane (cost per iteration, waits, decision icons), the sub-agent it launched, and a test run per iteration going from red to green.</sub></p>
 
 <p align="center"><img src="docs/screenshots/session-lanes-overlay.png" alt="The same session with the lanes overlaid on the context chart" width="900"></p>
-<p align="center"><sub>The same session with the lane overlay on: loop iterations as vertical bands, decision icons along the top, test runs as red and green dots.</sub></p>
+<p align="center"><sub>The same session with the lane overlay on: loop iterations as vertical bands with decision icons along the top, the sub-agent as a purple wash, test runs as red and green dots, and a suggestion icon on the bar above the chart.</sub></p>
 
 <p align="center"><img src="docs/screenshots/breakdown.png" alt="Drill-down breakdown: donuts, tokens-versus-dollars bars, treemaps, most expensive responses and the 24-hour dial" width="900"></p>
 <p align="center"><sub>The drill-down breakdown for all usage: where the dollars went, by billing kind, model, skill, plugin, tool and project, and when in the day.</sub></p>
@@ -166,7 +173,7 @@ entry, otherwise five minutes. Prompt text is kept in memory only, for a 100-cha
 ## Commands
 
 ```
-make test      # 303 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
+make test      # 316 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
 make run       # build "KAIkei.app" and open it
 make install   # copy it to ~/Applications
 make icon      # rebuild Resources/AppIcon.icns from Resources/AppIcon-source.png (only after replacing the artwork)

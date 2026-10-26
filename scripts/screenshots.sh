@@ -24,8 +24,10 @@ snap dashboard-m             M  "$WORK/out.png"
 snap session-timeline        XL "$WORK/out.png" drill=session:live height=1080
 snap session-timeline-zoom   XL "$WORK/out.png" drill=session:live height=1080 zoom=0.72-0.92
 LANES="$(cat "$WORK/home/lanes-session-id")"
+# The lane screenshots are only worth taking if the loop session really is the session on disk under that id.
+grep -q scheduled_task_fire "$WORK/home/.claude/projects/"*/"$LANES.jsonl" || { echo "demo loop session is missing or was overwritten" >&2; exit 1; }
 snap session-lanes           XL "$WORK/out.png" drill=session:"$LANES" height=1500 overlay=output
-snap session-lanes-overlay   XL "$WORK/out.png" drill=session:"$LANES" height=1500 overlay=output lanes=on
+snap session-lanes-overlay   XL "$WORK/out.png" drill=session:"$LANES" height=1500 overlay=output lanes=on promptlines=on
 snap breakdown               XL "$WORK/out.png" drill=total height=1560
 snap model-drilldown         XL "$WORK/out.png" drill=model:claude-sonnet-5-5 height=1560
 

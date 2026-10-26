@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import UsageCore
 
-/// `ClaudeUsageWidget --snapshot <S|M|L|XL> <out.png> [dark] [sessions=N] [drill=KIND:VALUE] [height=N] [axis=calls] [tip=call:N|prompt:N|compact:N|model:N] [zoom=LO-HI] [overlay=output,cost,cum|all] [lanes=on] [lanesoverlay=loop,agents,tests|all] [collapse=all] [archive=N] [chart=KIND[:TAB] width=N height=N]` renders the real view hierarchy to a PNG
+/// `ClaudeUsageWidget --snapshot <S|M|L|XL> <out.png> [dark] [sessions=N] [drill=KIND:VALUE] [height=N] [axis=calls] [tip=call:N|prompt:N|compact:N|model:N] [zoom=LO-HI] [overlay=output,cost,cum|all] [lanes=on] [promptlines=on] [lanesoverlay=loop,agents,tests|all] [collapse=all] [archive=N] [chart=KIND[:TAB] width=N height=N]` renders the real view hierarchy to a PNG
 /// without needing a visible window, so layouts can be reviewed (and screenshotted) headlessly.
 enum SnapshotMode {
     @MainActor static func run(arguments: [String]) {
@@ -43,6 +43,7 @@ enum SnapshotMode {
         }
         // `lanes=on` also draws the feature lanes' markers on the context chart; `lanesoverlay=` picks which (default: all).
         if arguments.contains("lanes=on") { store.featureOverlayOn = true }
+        if arguments.contains("promptlines=on") { store.promptOverlayOn = true }
         if let o = arguments.first(where: { $0.hasPrefix("lanesoverlay=") })?.dropFirst(13) {
             var set = Set<FeatureLane>()
             for name in o.split(separator: ",") {

@@ -3,14 +3,16 @@ import Foundation
 /// A horizontal band of the timeline stack, in points from its top. Hit-testing needs to know which kind of panel the
 /// pointer is over, because the same x means different things in the model ribbon, the prompt lane and a data panel.
 public struct PanelBand: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, lane }
+    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, lane, advice }
     public var kind: Kind
     public var minY: Double
     public var maxY: Double
     /// Which feature lane a `.lane` band is, so the pointer knows what it is over.
     public var lane: FeatureLane?
-    public init(kind: Kind, minY: Double, maxY: Double, lane: FeatureLane? = nil) {
-        self.kind = kind; self.minY = minY; self.maxY = maxY; self.lane = lane
+    /// The context chart, which can carry feature-lane markers drawn over it.
+    public var overlay: Bool
+    public init(kind: Kind, minY: Double, maxY: Double, lane: FeatureLane? = nil, overlay: Bool = false) {
+        self.kind = kind; self.minY = minY; self.maxY = maxY; self.lane = lane; self.overlay = overlay
     }
 }
 
@@ -24,6 +26,8 @@ public enum HoverTarget: Equatable, Hashable, Sendable {
     case modelSpan(String)
     /// Something in a feature lane.
     case lane(LaneTarget)
+    /// A suggestion the advisor would have made, by marker id.
+    case advice(String)
 }
 
 public enum TimelineHitTester {
@@ -41,7 +45,9 @@ public enum TimelineHitTester {
     }
 
     /// What is under the pointer. Nil over gaps between panels and over empty parts of a lane.
-    public static func target(atX px: Double, y: Double, width: Double, bands: [PanelBand], geometry g: TimelineGeometry, lanes: FeatureLanes? = nil) -> HoverTarget? {
+    public static func target(atX px: Double, y: Double, width: Double, bands: [PanelBand], geometry g: TimelineGeometry, lanes: FeatureLanes? = nil,
+        overlay: Set<FeatureLane> = [], advice: [AdviceMarker] = []
+    ) -> HoverTarget? {
         guard let band = bands.first(where: { y >= $0.minY && y <= $0.maxY }) else { return nil }
         let x = Self.x(atPixel: px, width: width, geometry: g)
 
@@ -63,7 +69,13 @@ public enum TimelineHitTester {
             return g.timeline.modelSpans.first { g.xRange(of: $0).contains(x) }.map { .modelSpan($0.id) }
         case .prompts:
             return nearestMarker(where: isDrawn)
+        case .advice:
+            let near = advice.map { ($0, abs(pixel(forX: g.x(time: $0.time), width: width, geometry: g) - px)) }.filter { $0.1 <= tolerance }
+            return near.min { $0.1 < $1.1 }.map { .advice($0.0.id) }
         case .data:
+            if band.overlay, let lanes, !overlay.isEmpty, let target = overlayTarget(lanes, selected: overlay, band: band, y: y, x: x, width: width, geometry: g) {
+                return .lane(target)
+            }
             if let line = nearestMarker(where: isStructural) { return line }
             return g.nearestCall(to: x).map { .call($0) }
         case .lane:
@@ -77,6 +89,26 @@ public enum TimelineHitTester {
             }
             return lanes.target(lane: lane, atX: x, row: row, tolerance: Self.tolerance * perPixel, geometry: g).map { .lane($0) }
         }
+    }
+}
+
+extension TimelineHitTester {
+    /// How close, in points, the pointer must be to an overlay icon or dot (vertically) to count as on it.
+    static let overlayReach = 9.0
+
+    /// The test dots and loop-decision icons drawn over the context chart. Everything else on the chart is hovered as a call.
+    static func overlayTarget(
+        _ lanes: FeatureLanes, selected: Set<FeatureLane>, band: PanelBand, y: Double, x: Double, width: Double, geometry g: TimelineGeometry
+    ) -> LaneTarget? {
+        let height = band.maxY - band.minY
+        let fromTop = y - band.minY
+        let reach = (g.domain.upperBound - g.domain.lowerBound) / max(width, 1) * tolerance
+        if selected.contains(.tests), abs(fromTop - height * (1 - FeatureOverlayLayout.testDotFraction)) <= overlayReach,
+            let hit = lanes.target(lane: .tests, atX: x, row: nil, tolerance: reach, geometry: g) { return hit }
+        if selected.contains(.loop), abs(fromTop - height * (1 - FeatureOverlayLayout.iconFraction)) <= overlayReach,
+            case .decision? = lanes.target(lane: .loop, atX: x, row: nil, tolerance: reach, geometry: g),
+            let hit = lanes.target(lane: .loop, atX: x, row: nil, tolerance: reach, geometry: g) { return hit }
+        return nil
     }
 }
 
@@ -151,11 +183,14 @@ public struct DwellTracker: Equatable, Sendable {
 
 /// One item in the timeline's vertical stack.
 public struct StackItem: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, header, lane }
+    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, header, lane, advice }
     public var kind: Kind
     public var height: Double
     public var lane: FeatureLane?
-    public init(kind: Kind, height: Double, lane: FeatureLane? = nil) { self.kind = kind; self.height = height; self.lane = lane }
+    public var overlay: Bool
+    public init(kind: Kind, height: Double, lane: FeatureLane? = nil, overlay: Bool = false) {
+        self.kind = kind; self.height = height; self.lane = lane; self.overlay = overlay
+    }
 }
 
 /// The vertical layout of the chart stack, described once so the views and the hit-testing cannot drift apart: the same
@@ -172,7 +207,8 @@ public struct TimelineStackLayout: Equatable, Sendable {
             switch item.kind {
             case .ribbon: out.append(PanelBand(kind: .ribbon, minY: y, maxY: y + item.height))
             case .prompts: out.append(PanelBand(kind: .prompts, minY: y, maxY: y + item.height))
-            case .data: out.append(PanelBand(kind: .data, minY: y, maxY: y + item.height))
+            case .data: out.append(PanelBand(kind: .data, minY: y, maxY: y + item.height, overlay: item.overlay))
+            case .advice: out.append(PanelBand(kind: .advice, minY: y, maxY: y + item.height))
             case .lane: out.append(PanelBand(kind: .lane, minY: y, maxY: y + item.height, lane: item.lane))
             case .header: break
             }

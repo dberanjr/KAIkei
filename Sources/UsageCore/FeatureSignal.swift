@@ -126,16 +126,33 @@ extension TranscriptParser {
         }
     }
 
-    /// True when any segment of a shell command (split on `&&`, `||`, `;`, `|` and newlines) starts with a known test runner,
-    /// after leading `VAR=value` assignments.
-    static func runsTests(_ command: String) -> Bool {
-        let segments = command.components(separatedBy: CharacterSet(charactersIn: ";|&\n")).map { $0.trimmingCharacters(in: .whitespaces) }
-        return segments.contains { segment in
+    /// The first segment of a shell command (split on `&&`, `||`, `;`, `|` and newlines) that starts with a known test
+    /// runner, after leading `VAR=value` assignments. Nil when none does.
+    static func testCommandSegment(_ command: String) -> String? {
+        for segment in shellSegments(command) {
             var words = segment.split(separator: " ", omittingEmptySubsequences: true)[...]
             while let first = words.first, first.contains("="), !first.hasPrefix("-"), first.first?.isLetter == true { words = words.dropFirst() }
-            let rest = words.joined(separator: " ") + " "
-            return testRunners.contains { rest.hasPrefix($0.hasSuffix(" ") ? $0 : $0 + " ") }
+            let rest = words.joined(separator: " ")
+            if testRunners.contains(where: { (rest + " ").hasPrefix($0.hasSuffix(" ") ? $0 : $0 + " ") }) { return rest }
         }
+        return nil
+    }
+
+    static func runsTests(_ command: String) -> Bool { testCommandSegment(command) != nil }
+
+    /// Splits on `&&`, `||`, `;`, `|` and newlines. A lone `&` stays: it is part of `2>&1`.
+    private static func shellSegments(_ command: String) -> [String] {
+        let chars = Array(command)
+        var out: [String] = [], current = "", i = 0
+        func flush() { out.append(current.trimmingCharacters(in: .whitespaces)); current = "" }
+        while i < chars.count {
+            let c = chars[i], next = i + 1 < chars.count ? chars[i + 1] : nil
+            if (c == "&" && next == "&") || (c == "|" && next == "|") { flush(); i += 2; continue }
+            if c == ";" || c == "\n" || c == "|" { flush(); i += 1; continue }
+            current.append(c); i += 1
+        }
+        flush()
+        return out.filter { !$0.isEmpty }
     }
 
     private static func toolResultID(_ content: Any?) -> String? {
