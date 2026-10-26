@@ -38,7 +38,12 @@ extension TranscriptParser {
     private static let toolResultMarker = Data(#""tool_result""#.utf8)
     private static let toolUseNameMarkers = ["ScheduleWakeup", "Skill", "Agent", "Bash"].map { Data(#""name":"\#($0)""#.utf8) }
     private static let summaryMarkers = ["Test run with", "Executed ", " passed", "Tests:"].map { Data($0.utf8) }
-    private static let testRunners = ["swift test", "pytest", "jest", "vitest", "make test", "npm test", "xcodebuild test"]
+    /// What a command segment starts with when it runs tests. Matching the start (not anywhere in the text) keeps a commit
+    /// message or an install that merely mentions a runner from counting as a test run.
+    private static let testRunners = [
+        "swift test", "pytest", "python -m pytest", "python3 -m pytest", "jest", "npx jest", "vitest", "npx vitest", "npm test",
+        "npm run test", "npm t ", "yarn test", "pnpm test", "make test", "xcodebuild test",
+    ]
     private static let loopPromptLimit = 100
     private static let outputKeep = 20_000
 
@@ -86,7 +91,7 @@ extension TranscriptParser {
                         .agentSpawned(toolUseID: toolID, type: input["subagent_type"] as? String, description: input["description"] as? String ?? ""),
                         id: "\(toolID)#agent")
                 case "Bash":
-                    guard let command = input["command"] as? String, testRunners.contains(where: command.contains) else { continue }
+                    guard let command = input["command"] as? String, runsTests(command) else { continue }
                     return signal(.testCommand(toolUseID: toolID, command: command), id: "\(toolID)#test")
                 default: continue
                 }
@@ -110,6 +115,18 @@ extension TranscriptParser {
             return nil
         default:
             return nil
+        }
+    }
+
+    /// True when any segment of a shell command (split on `&&`, `||`, `;`, `|` and newlines) starts with a known test runner,
+    /// after leading `VAR=value` assignments.
+    static func runsTests(_ command: String) -> Bool {
+        let segments = command.components(separatedBy: CharacterSet(charactersIn: ";|&\n")).map { $0.trimmingCharacters(in: .whitespaces) }
+        return segments.contains { segment in
+            var words = segment.split(separator: " ", omittingEmptySubsequences: true)[...]
+            while let first = words.first, first.contains("="), !first.hasPrefix("-"), first.first?.isLetter == true { words = words.dropFirst() }
+            let rest = words.joined(separator: " ") + " "
+            return testRunners.contains { rest.hasPrefix($0.hasSuffix(" ") ? $0 : $0 + " ") }
         }
     }
 

@@ -115,6 +115,17 @@ func outputLine(toolID: String = "t5", text: String) -> String {
         #expect(signal(bashLine(command: "ls -la")) == nil)
     }
 
+    @Test func onlyACommandThatRunsARunnerIsATestCommand() throws {
+        // Found in a real transcript: a commit message and an install that merely mention a runner were counted as test runs.
+        #expect(signal(bashLine(command: #"git commit -m \"v0.0.12: add Vitest test infrastructure\""#)) == nil)
+        #expect(signal(bashLine(command: "npm install --save-dev vitest")) == nil)
+        #expect(signal(bashLine(command: "grep -r pytest docs/")) == nil)
+        for command in [#"cd \"/work/my app\" && npm test"#, "npx vitest run", "FORCE_COLOR=0 pytest -q", "python3 -m pytest tests", "make test && echo ok",
+                        "swift test --filter X", "cd x; yarn test"] {
+            #expect(signal(bashLine(command: command)) != nil, "should be a test run: \(command)")
+        }
+    }
+
     @Test func aToolResultOnlyBecomesTestOutputWhenItHasASummaryMarker() throws {
         let yes = try #require(signal(outputLine(text: "Test run with 3 tests in 1 suites passed after 0.1 seconds.")))
         #expect(yes.kind == .testOutput(toolUseID: "t5", text: "Test run with 3 tests in 1 suites passed after 0.1 seconds."))

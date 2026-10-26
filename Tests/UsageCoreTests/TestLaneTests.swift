@@ -49,6 +49,14 @@ import Testing
         #expect(s.passed == 5 && s.failed == 1 && s.runner == "jest")
     }
 
+    @Test func vitestSummary() throws {
+        let out = " Test Files  2 passed (2)\n       Tests  7 passed (7)\n    Start at  11:59:56"
+        let s = try #require(parse(out))
+        #expect(s.passed == 7 && s.failed == 0 && s.runner == "vitest")
+        let bad = try #require(parse("      Tests  1 failed | 4 passed | 2 skipped (7)"))
+        #expect(bad.passed == 4 && bad.failed == 1 && bad.skipped == 2)
+    }
+
     @Test func noRecognisableSummaryIsNil() {
         #expect(parse("error: build failed") == nil)
         #expect(parse("3 files passed review") == nil)

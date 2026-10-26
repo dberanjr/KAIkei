@@ -138,7 +138,7 @@ entry, otherwise five minutes. Prompt text is kept in memory only, for a 100-cha
 ## Commands
 
 ```
-make test      # 233 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
+make test      # 300 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
 make run       # build "KAIkei.app" and open it
 make install   # copy it to ~/Applications
 make icon      # rebuild Resources/AppIcon.icns from Resources/AppIcon-source.png (only after replacing the artwork)
@@ -148,7 +148,8 @@ Sizes S / M / L / XL (top right), a pin to keep it above other windows (or let i
 and a menu to show it on every desktop. Settings are remembered. `--dump` prints what the collector sees;
 `--snapshot L out.png [dark] [sessions=6] [drill=model:claude-sonnet-5-5] [height=1800]` renders a size to a PNG
 without a visible window (`sessions=N` pads the open-session list to test busy days; `drill=` opens a detail page, e.g.
-`total`, `session:live`, `day:3`, `skill:NAME`).
+`total`, `session:live`, `day:3`, `skill:NAME`). `lanes=on` and `lanesoverlay=loop,agents,tests|all` draw the loop,
+sub-agent and test-run lanes' markers on the context chart as well as in their own lanes.
 
 Each size shows the richest layout that fits its window and drops lower-priority pieces (extra sessions first, then
 breakdown rows, the trend strip, the cost split) instead of scrolling. Detail pages do scroll.

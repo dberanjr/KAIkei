@@ -12,7 +12,7 @@ public struct TestSummary: Equatable, Sendable {
 /// Reads the summary a test runner prints. Anything it does not recognise is nil, never a guess.
 public enum TestSummaryParser {
     public static func parse(_ output: String) -> TestSummary? {
-        swift(output) ?? pytest(output) ?? jest(output)
+        swift(output) ?? pytest(output) ?? vitest(output) ?? jest(output)
     }
 
     /// `swift test` prints an XCTest summary (possibly "Executed 0 tests") and a swift-testing summary. Both count.
@@ -35,6 +35,16 @@ public enum TestSummaryParser {
         func count(_ word: String) -> Int { lastMatch(#"(\d+) \#(word)"#, in: text)?[0] ?? 0 }
         let passed = count("passed"), failed = count("failed") + count("errors?"), skipped = count("skipped")
         return passed + failed + skipped == 0 ? nil : TestSummary(runner: "pytest", passed: passed, failed: failed, skipped: skipped)
+    }
+
+    /// vitest prints `Tests  1 failed | 4 passed | 2 skipped (7)`.
+    private static func vitest(_ output: String) -> TestSummary? {
+        guard let line = output.split(separator: "\n").last(where: { $0.range(of: #"^\s*Tests\s+\d"#, options: .regularExpression) != nil })
+        else { return nil }
+        let text = String(line)
+        func count(_ word: String) -> Int { lastMatch(#"(\d+) \#(word)"#, in: text)?[0] ?? 0 }
+        let (passed, failed, skipped) = (count("passed"), count("failed"), count("skipped"))
+        return passed + failed + skipped == 0 ? nil : TestSummary(runner: "vitest", passed: passed, failed: failed, skipped: skipped)
     }
 
     private static func jest(_ output: String) -> TestSummary? {
