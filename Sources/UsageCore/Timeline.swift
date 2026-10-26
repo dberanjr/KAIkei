@@ -20,6 +20,10 @@ public struct CallPoint: Identifiable, Equatable, Sendable {
     public var turn: Int
     public var tools: [String]
     public var skill: String?
+    public var plugin: String?
+    /// Set on sub-agent calls: the run they belong to and the parent `Agent` tool_use that spawned it.
+    public var agentID: String?
+    public var spawnToolUseID: String?
     /// Spend so far in this session, up to and including this call (sub-agent calls included).
     public var cumulativeCost: Double
 
@@ -132,7 +136,8 @@ public enum Timelines {
                 thinkingTokens: r.thinkingTokens, effort: r.effort, cost: r.cost(billing),
                 costParts: Pricing.costParts(of: r.usage, model: r.model, billing: billing), isSidechain: r.isSidechain,
                 idleGap: gap, cacheExpired: gap.map { $0 > timeline.cacheTTL } ?? false,
-                turn: promptTimes.filter { $0 <= r.timestamp }.count, tools: r.tools.values.sorted(), skill: r.skill, cumulativeCost: 0)
+                turn: promptTimes.filter { $0 <= r.timestamp }.count, tools: r.tools.values.sorted(), skill: r.skill, plugin: r.plugin,
+                agentID: r.agentID, spawnToolUseID: r.spawnToolUseID, cumulativeCost: 0)
         }
         var running = 0.0
         for i in timeline.calls.indices {

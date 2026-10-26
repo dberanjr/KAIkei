@@ -73,9 +73,7 @@ struct CallCard: View {
                     Text(ModelFamily.displayName(modelID: call.model) + (call.effort.map { " · \($0)" } ?? "")).font(.callout)
                     if call.isSidechain { Text("sub-agent").font(.caption).foregroundStyle(.secondary) }
                 }
-                if let preview = promptPreview(turn: call.turn, in: timeline) {
-                    Text("Prompt \(call.turn): “\(preview)”").font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                }
+                if let preview = promptPreview(turn: call.turn, in: timeline) { promptSection(preview) }
                 Divider()
                 contextSection(window: window, total: context)
                 Divider()
@@ -85,6 +83,18 @@ struct CallCard: View {
                 if !call.tools.isEmpty || call.skill != nil { toolsSection }
                 if !slice.isEmpty { eventsSection(slice) }
             }
+        }
+    }
+
+    /// The prompt this call was answering, quoted at more length than the one-line chart tooltips allow, with what the
+    /// prompt has cost up to and including this call.
+    private func promptSection(_ preview: String) -> some View {
+        let sofar = timeline.calls[...index].filter { $0.turn == call.turn }
+        return VStack(alignment: .leading, spacing: 3) {
+            Text("Prompt \(call.turn)").font(.caption.weight(.semibold))
+            Text("“\(preview)”").font(.caption).foregroundStyle(.secondary).lineLimit(6).fixedSize(horizontal: false, vertical: true)
+            Text("\(Fmt.count(sofar.count, "call")) so far · \(Fmt.money(sofar.reduce(0) { $0 + $1.cost }))")
+                .font(.caption).foregroundStyle(.tertiary).monospacedDigit()
         }
     }
 
@@ -123,7 +133,8 @@ struct CallCard: View {
         let p = call.costParts
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Cost").font(.caption.weight(.semibold))
+                RoundedRectangle(cornerRadius: 2).fill(Theme.seriesCostPerCall).frame(width: 8, height: 8)
+                Text("Cost of this call").font(.caption.weight(.semibold))
                 Text(Fmt.money(call.cost)).font(.callout.weight(.semibold)).monospacedDigit()
                 Spacer()
             }
@@ -132,8 +143,8 @@ struct CallCard: View {
             Row(label: "Output", value: Fmt.money(p.output), swatch: Theme.ramp[2])
             Row(label: "Input", value: Fmt.money(p.input), swatch: Theme.ramp[3])
             let total = timeline.totalCost
-            Row(label: "Session so far", value: Fmt.money(call.cumulativeCost),
-                detail: total > 0 ? Fmt.percent(call.cumulativeCost / total * 100) : nil)
+            Row(label: "Cost so far", value: Fmt.money(call.cumulativeCost),
+                detail: total > 0 ? Fmt.percent(call.cumulativeCost / total * 100) : nil, swatch: Theme.seriesCumulative)
         }
     }
 
@@ -260,6 +271,90 @@ struct ModelSpanCard: View {
                 Text("\(Fmt.count(span.callCount, "call")) · \(Fmt.money(span.cost))").font(.caption).foregroundStyle(.secondary)
                 Text("Context peaked at \(Fmt.tokens(peak)) on this model").font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+/// Hover card for something in a feature lane: a loop iteration or decision, a sub-agent run, or a test run.
+struct LaneCard: View {
+    let target: LaneTarget
+    let lanes: FeatureLanes
+    var width: CGFloat = 290
+
+    var body: some View {
+        CardChrome(width: width) {
+            VStack(alignment: .leading, spacing: 6) { content }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch target {
+        case .iteration(let n):
+            if let loop = lanes.loop, let it = loop.iterations.first(where: { $0.index == n }) { iteration(it, of: loop.iterations.count) }
+        case .decision(let id):
+            if let d = lanes.loop?.decisions.first(where: { $0.id == id }) { decision(d) }
+        case .subagent(let id):
+            if let run = lanes.subagents?.runs.first(where: { $0.id == id }) { subagent(run) }
+        case .testRun(let id):
+            if let run = lanes.tests?.runs.first(where: { $0.id == id }) { testRun(run) }
+        }
+    }
+
+    private func title(_ text: String, _ lane: FeatureLane, trailing: String? = nil) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: lane.symbol).foregroundStyle(lane.color)
+            Text(text).font(.callout.weight(.semibold))
+            Spacer()
+            if let trailing { Text(trailing).font(.caption).foregroundStyle(.tertiary).lineLimit(1) }
+        }
+    }
+
+    private func line(_ text: String) -> some View { Text(text).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+
+    @ViewBuilder private func iteration(_ it: LoopIteration, of count: Int) -> some View {
+        title("Loop iteration \(it.index) of \(count)", .loop)
+        line("\(clock(it.start)) to \(clock(it.end)) · \(Fmt.spanLength(it.end.timeIntervalSince(it.start)))")
+        Divider()
+        line("\(Fmt.count(it.callCount, "call")) · \(Fmt.money(it.cost)) · \(Fmt.tokens(it.outputTokens)) tokens written")
+        switch it.startedBy {
+        case .invoked: line("Started when the loop was set up")
+        case .scheduledWake:
+            if let late = it.lateness, let due = it.plannedFor { line("Due \(clock(due)), woke \(Fmt.spanLength(max(late, 0))) later") }
+            else { line("Woke on the schedule Claude set") }
+        case .fallbackWake: line("Woke on the harness's fallback timer: the previous iteration neither rescheduled nor stopped")
+        }
+        if !it.prompt.isEmpty { line("“\(it.prompt)”") }
+    }
+
+    @ViewBuilder private func decision(_ d: LoopDecision) -> some View {
+        switch d.kind {
+        case .again(let seconds, let reason):
+            title("Claude chose to loop again", .loop, trailing: clock(d.time))
+            line("Wake in \(Fmt.spanLength(TimeInterval(seconds))) (after iteration \(d.afterIteration))")
+            if let reason, !reason.isEmpty { line(reason) }
+        case .stop:
+            title("Claude stopped the loop", .loop, trailing: clock(d.time))
+            line("After iteration \(d.afterIteration)")
+        }
+    }
+
+    @ViewBuilder private func subagent(_ run: SubagentRun) -> some View {
+        title(run.label, .subagents, trailing: run.type)
+        line("\(clock(run.start)) to \(clock(run.end)) · \(Fmt.spanLength(run.end.timeIntervalSince(run.start)))")
+        Divider()
+        line("\(Fmt.count(run.callCount, "call")) · \(Fmt.money(run.cost)) · \(Fmt.tokens(run.outputTokens)) tokens written")
+    }
+
+    @ViewBuilder private func testRun(_ run: TestRun) -> some View {
+        title("Test run", .tests, trailing: clock(run.time))
+        line(run.command)
+        Divider()
+        if let s = run.summary {
+            let pct = s.total > 0 ? Double(s.passed) / Double(s.total) * 100 : 0
+            line("\(s.passed) of \(s.total) passed (\(Fmt.percent(pct)))" + (s.failed > 0 ? " · \(s.failed) failed" : "") + (s.skipped > 0 ? " · \(s.skipped) skipped" : ""))
+            line("Read from \(s.runner) output")
+        } else {
+            line("The result could not be read from the output")
         }
     }
 }

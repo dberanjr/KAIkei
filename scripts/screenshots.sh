@@ -23,6 +23,9 @@ snap dashboard-xl-dark       XL "$WORK/out.png" dark
 snap dashboard-m             M  "$WORK/out.png"
 snap session-timeline        XL "$WORK/out.png" drill=session:live height=1080
 snap session-timeline-zoom   XL "$WORK/out.png" drill=session:live height=1080 zoom=0.72-0.92
+LANES="$(cat "$WORK/home/lanes-session-id")"
+snap session-lanes           XL "$WORK/out.png" drill=session:"$LANES" height=1500 overlay=output
+snap session-lanes-overlay   XL "$WORK/out.png" drill=session:"$LANES" height=1500 overlay=output lanes=on
 snap breakdown               XL "$WORK/out.png" drill=total height=1560
 snap model-drilldown         XL "$WORK/out.png" drill=model:claude-sonnet-5-5 height=1560
 

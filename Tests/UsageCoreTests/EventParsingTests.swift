@@ -42,10 +42,10 @@ func compactBoundaryLine(
     }
 
     @Test func previewCollapsesWhitespaceAndIsCapped() throws {
-        let long = "line one\n\n   line two " + String(repeating: "x", count: 300)
+        let long = "line one\n\n   line two " + String(repeating: "x", count: 600)
         guard case .prompt(let preview) = try #require(event(promptLine(long))).kind else { Issue.record("not a prompt"); return }
         #expect(preview.hasPrefix("line one line two xxx"))
-        #expect(preview.count == 101 && preview.hasSuffix("…"))  // 100 characters plus the ellipsis
+        #expect(preview.count == 401 && preview.hasSuffix("…"))  // 400 characters plus the ellipsis
     }
 
     @Test func toolResultsAreNotPrompts() {

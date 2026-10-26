@@ -42,6 +42,10 @@ enum Theme {
         dynamic(light: 0xe79fbc, dark: 0xe0a0bb), dynamic(light: 0xdd6b93, dark: 0xd9779c),
         dynamic(light: 0xc33f72, dark: 0xc94f7c), dynamic(light: 0x8f2150, dark: 0x9a3560),
     ]
+    // Feature lanes. One hue per lane, kept off the model, context, output, cost and cumulative hues above.
+    static let laneLoop = dynamic(light: 0x0f8f8f, dark: 0x2bb5b5)
+    static let laneAgents = dynamic(light: 0x9a6b3d, dark: 0xc08a5a)
+    static let lanePlugins = dynamic(light: 0x5f7388, dark: 0x8ea3b8)
     static let caution = Color(nsColor: .systemOrange)
     static let critical = Color(nsColor: .systemRed)
     static let good = Color(nsColor: .systemGreen)

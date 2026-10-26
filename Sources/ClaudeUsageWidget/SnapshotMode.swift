@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import UsageCore
 
-/// `ClaudeUsageWidget --snapshot <S|M|L|XL> <out.png> [dark] [sessions=N] [drill=KIND:VALUE] [height=N] [axis=calls] [tip=call:N|prompt:N|compact:N|model:N] [zoom=LO-HI] [overlay=output,cost,cum|all] [collapse=all] [archive=N] [chart=KIND[:TAB] width=N height=N]` renders the real view hierarchy to a PNG
+/// `ClaudeUsageWidget --snapshot <S|M|L|XL> <out.png> [dark] [sessions=N] [drill=KIND:VALUE] [height=N] [axis=calls] [tip=call:N|prompt:N|compact:N|model:N] [zoom=LO-HI] [overlay=output,cost,cum|all] [lanes=on] [lanesoverlay=loop,agents,tests|all] [collapse=all] [archive=N] [chart=KIND[:TAB] width=N height=N]` renders the real view hierarchy to a PNG
 /// without needing a visible window, so layouts can be reviewed (and screenshotted) headlessly.
 enum SnapshotMode {
     @MainActor static func run(arguments: [String]) {
@@ -40,6 +40,21 @@ enum SnapshotMode {
                 }
             }
             store.overlays = set
+        }
+        // `lanes=on` also draws the feature lanes' markers on the context chart; `lanesoverlay=` picks which (default: all).
+        if arguments.contains("lanes=on") { store.featureOverlayOn = true }
+        if let o = arguments.first(where: { $0.hasPrefix("lanesoverlay=") })?.dropFirst(13) {
+            var set = Set<FeatureLane>()
+            for name in o.split(separator: ",") {
+                switch name {
+                case "loop": set.insert(.loop)
+                case "agents": set.insert(.subagents)
+                case "tests": set.insert(.tests)
+                case "all": set = Set(FeatureLane.allCases)
+                default: break
+                }
+            }
+            store.featureOverlayLanes = set
         }
         // `hoverdelay=V` drives the same setter the settings slider uses (a regression check for it crashing).
         if let v = arguments.first(where: { $0.hasPrefix("hoverdelay=") }).flatMap({ Double($0.dropFirst(11)) }) {

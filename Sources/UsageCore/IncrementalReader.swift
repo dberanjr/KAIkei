@@ -27,8 +27,10 @@ public struct IncrementalReader {
             buffer = Data(buffer[buffer.startIndex...lastNewline])
             for line in buffer.split(separator: 0x0A, omittingEmptySubsequences: true) {
                 let data = Data(line)
+                // A row can be a billed response and a signal at once (a ScheduleWakeup call is both), so these are independent.
                 if let rec = TranscriptParser.parse(line: data) { store.add(rec) }
                 else if let event = TranscriptParser.parseEvent(line: data) { store.add(event) }
+                if let signal = TranscriptParser.parseSignal(line: data) { store.add(signal) }
             }
         }
         offsets[url.path] = offset - UInt64(carry.count)

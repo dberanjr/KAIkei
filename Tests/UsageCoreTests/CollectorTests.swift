@@ -149,4 +149,18 @@ import Testing
         let dash = fx.collector().refresh(now: .now)
         #expect(dash.events.count == 2)
     }
+
+    @Test func dashboardExposesFeatureSignals() throws {
+        let fx = try Fixture(); defer { fx.cleanup() }
+        // The ScheduleWakeup row is also a billed assistant row, so it must yield both a record and a signal.
+        let scheduled = scheduleLine().replacingOccurrences(
+            of: #""role":"assistant","content""#,
+            with: #""role":"assistant","usage":{"input_tokens":2,"output_tokens":5},"content""#)
+        try [fireLine(session: "s"), scheduled.replacingOccurrences(of: #""sessionId":"s1""#, with: #""sessionId":"s""#)]
+            .joined(separator: "\n").appending("\n")
+            .write(to: fx.projects.appendingPathComponent("t.jsonl"), atomically: true, encoding: .utf8)
+        let dash = fx.collector().refresh(now: .now)
+        #expect(dash.signals.count == 2)
+        #expect(dash.records.count == 1)
+    }
 }

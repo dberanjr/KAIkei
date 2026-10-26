@@ -67,9 +67,11 @@ struct SessionTimelineView: View {
     private var density: TimelineDensity {
         guard focus else { return TimelineDensity(store.size) }
         // Everything outside the data panels (title, readout, banner, chips, legend, headers, ribbon) takes about this much.
-        let overhead: CGFloat = 400
         let base = TimelineDensity.full
+        // Lane charts stretch with the panels; each lane's header and the gaps around it do not.
+        let overhead: CGFloat = 400 + CGFloat(lanes.present.count) * (base.headerHeight + 2 * TimelineDensity.spacing)
         let variable = base.mainHeight + separate.reduce(CGFloat(0)) { $0 + (($1 == .cumulative) ? base.cumulativeHeight : base.panelHeight) }
+            + lanes.present.reduce(CGFloat(0)) { $0 + lanes.laneHeight($1, density: base) }
         let factor = availableHeight > 0 ? min(max((availableHeight - overhead) / max(variable, 1), 1), 3) : 1
         return base.scaled(factor)
     }
@@ -83,6 +85,9 @@ struct SessionTimelineView: View {
     /// Series that have their own panel: everything not overlaid on the context chart.
     private var separate: [TimelineSeries] { TimelineSeries.allCases.filter { !store.overlays.contains($0) } }
 
+    /// Loop, sub-agent, test and plugin lanes for this session. Cached in the store, so a redraw does not rebuild them.
+    private var lanes: FeatureLanes { store.featureLanes(sessionID: sessionID, timeline: timeline) }
+
     private func height(of series: TimelineSeries) -> CGFloat { series == .cumulative ? density.cumulativeHeight : density.panelHeight }
 
     /// The vertical layout, described once: the same items build the views and give the pointer its bands.
@@ -93,6 +98,7 @@ struct SessionTimelineView: View {
             .init(kind: .header, height: density.headerHeight), .init(kind: .data, height: density.mainHeight),
         ]
         for series in separate { items += [.init(kind: .header, height: density.headerHeight), .init(kind: .data, height: height(of: series))] }
+        items += lanes.stackItems(density: density)
         return TimelineStackLayout(items: items, spacing: TimelineDensity.spacing)
     }
 
@@ -223,7 +229,37 @@ struct SessionTimelineView: View {
                 HStack(spacing: 6) { ForEach(TimelineSeries.allCases) { series in chip(series, g) } }
                 VStack(alignment: .leading, spacing: 5) { ForEach(TimelineSeries.allCases) { series in chip(series, g) } }
             }
+            if lanes.present.contains(where: \.canOverlay) { featureOverlayToggle }
         }
+    }
+
+    /// Draws the loop, sub-agent and test markers on the context chart too. Off by default; the lanes below always show them.
+    private var featureOverlayToggle: some View {
+        HStack(spacing: 8) {
+            Toggle(isOn: $store.featureOverlayOn) { Text("Overlay lanes on the context chart").font(.caption.weight(.semibold)) }
+                .toggleStyle(.switch).controlSize(.mini)
+            if store.featureOverlayOn {
+                ForEach(lanes.present.filter(\.canOverlay)) { lane in laneChip(lane) }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func laneChip(_ lane: FeatureLane) -> some View {
+        let on = store.featureOverlayLanes.contains(lane)
+        return Button {
+            if on { store.featureOverlayLanes.remove(lane) } else { store.featureOverlayLanes.insert(lane) }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(lane.color)
+                Text(lane.title).fontWeight(.medium)
+            }
+            .font(.caption).lineLimit(1)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(Capsule().fill(on ? lane.color.opacity(0.14) : Color.clear))
+            .overlay(Capsule().stroke(on ? lane.color : Color.primary.opacity(0.2), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     private func chip(_ series: TimelineSeries, _ g: TimelineGeometry) -> some View {
@@ -284,6 +320,7 @@ struct SessionTimelineView: View {
                 panelHeader(title(of: series, g), color: series.color, blurb: density == .compact ? "" : blurb(of: series, g), height: height) { seriesLegend(series, g) }
                 separatePanel(series, g)
             }
+            if !lanes.isEmpty { FeatureLaneStack(lanes: lanes, geometry: g, density: density) }
         }
         .coordinateSpace(name: "timelineStack")
         .background(GeometryReader { box in
@@ -296,7 +333,7 @@ struct SessionTimelineView: View {
         .overlay { pointerSurface(g) }
         // The crosshair and cards live in an overlay that observes the hover model, so the charts above never redraw.
         .overlay(alignment: .topLeading) {
-            TimelineHoverOverlay(hover: hover, timeline: timeline, geometry: g, bands: layout.bands)
+            TimelineHoverOverlay(hover: hover, timeline: timeline, geometry: g, bands: layout.bands, lanes: lanes)
         }
     }
 
@@ -334,7 +371,7 @@ struct SessionTimelineView: View {
             hover.pointerLeft()
             return
         }
-        let target = TimelineHitTester.target(atX: Double(point.x), y: Double(point.y), width: width, bands: bands, geometry: g)
+        let target = TimelineHitTester.target(atX: Double(point.x), y: Double(point.y), width: width, bands: bands, geometry: g, lanes: lanes)
         let x = TimelineHitTester.x(atPixel: Double(point.x), width: width, geometry: g)
         hover.pointerMoved(to: point, target: target, focus: g.nearestCall(to: x))
     }
@@ -502,6 +539,7 @@ struct SessionTimelineView: View {
             ForEach(overlaid) { series in
                 overlayLine(series, calls: scaled, top: top, peak: peak(of: series, g), base: base, g: g)
             }
+            if store.featureOverlayOn { featureOverlayMarks(lanes, selected: store.featureOverlayLanes, g: g, top: top) }
             eventRules(g, labels: density.showsLabels)
         }
         .chartForegroundStyleScale(domain: Self.layerNames, range: [Theme.ramp[0], Theme.ramp[1], Theme.ramp[3]])
@@ -775,6 +813,7 @@ struct TimelineHoverOverlay: View {
     let timeline: SessionTimeline
     let geometry: TimelineGeometry
     let bands: [PanelBand]
+    let lanes: FeatureLanes
 
     var body: some View {
         GeometryReader { box in
@@ -832,6 +871,8 @@ struct TimelineHoverOverlay: View {
             if let m = timeline.markers.first(where: { $0.id == id }) { MarkerCard(marker: m, timeline: timeline, width: width) }
         case .modelSpan(let id):
             if let s = timeline.modelSpans.first(where: { $0.id == id }) { ModelSpanCard(span: s, timeline: timeline, width: width) }
+        case .lane(let target):
+            LaneCard(target: target, lanes: lanes, width: width)
         }
     }
 
@@ -841,7 +882,14 @@ struct TimelineHoverOverlay: View {
     }
 
     private func size(of target: HoverTarget, in container: CGSize) -> CGSize {
-        let height: CGFloat = { if case .call = target { 400 } else if case .modelSpan = target { 120 } else { 130 } }()
+        let height: CGFloat = {
+            switch target {
+            case .call: 470
+            case .modelSpan: 120
+            case .lane: 150
+            default: 130
+            }
+        }()
         return CGSize(width: cardWidth(for: target, in: container), height: height)
     }
 
@@ -869,6 +917,8 @@ struct TimelineHoverOverlay: View {
             let span = timeline.modelSpans.first { $0.id == id }
             let mid = span.map { (geometry.xRange(of: $0).lowerBound + geometry.xRange(of: $0).upperBound) / 2 } ?? 0
             return CGPoint(x: TimelineHitTester.pixel(forX: mid, width: width, geometry: geometry), y: 10)
+        case .lane:
+            return CGPoint(x: width / 2, y: container.height - 40)
         }
     }
 }

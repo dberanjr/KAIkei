@@ -32,7 +32,7 @@ cd KAIkei
 make install   # builds KAIkei.app and copies it to ~/Applications
 ```
 
-Or grab `KAIkei-0.1.1-macOS-arm64.zip` from the [latest release](https://github.com/dberanjr/KAIkei/releases/latest). The
+Or grab `KAIkei-0.2.0-macOS-arm64.zip` from the [latest release](https://github.com/dberanjr/KAIkei/releases/latest). The
 build is ad-hoc signed, not notarized, so on first launch right-click the app and choose **Open** (or run
 `xattr -dr com.apple.quarantine KAIkei.app`).
 
@@ -84,6 +84,28 @@ A session's detail page opens with a **context window and cost timeline** for de
 - for an open session, a cost-based nudge: what carrying the context costs per call, what compacting would cost and
   save, whether the cache is warm, and the extra a cold cache would add to the next prompt.
 
+### Claude Code feature lanes
+
+When a session used `/loop`, sub-agents, test runners or plugins, its timeline grows a lane for each, on the same time axis
+as the charts above (a session that used none of them shows nothing extra):
+
+- **`/loop`**: one vertical band per iteration, its height the iteration's cost (sub-agent spend included). An icon marks each
+  moment Claude decided to loop again or stopped, a dashed line shows the wait before the next wake-up, and a warning icon
+  marks a wake-up nobody scheduled (the harness's fallback timer). The header gives iterations, total cost and the average.
+- **Sub-agents**: one bar per run from its first to its last response, stacked when runs overlap, labelled with what the
+  parent asked for.
+- **Test runs**: a bar per run split into passed and failed, from the summary the runner printed (`swift test`, XCTest,
+  pytest, vitest, jest). The header shows the last run ("13 / 13 (100%)"). If the output of the last run cannot be read, it
+  says so and never shows green; a session that ends red says "ended red".
+- **Plugins and skills**: one bar of cost by plugin, with the smaller ones folded into "other".
+
+The **Overlay lanes on the context chart** switch (off by default, remembered) draws the loop bands and decision icons,
+sub-agent runs and test-run dots on the context chart as well, with a checkbox per lane. Hover any element for its card:
+an iteration's cost, calls, tokens and how late it woke; a decision's delay and reason; a run's duration and cost; a test run's pass ratio.
+
+A `/goal` lane is not built yet: Claude Code does not document how a goal's outcome is written to the transcript, and no
+`/goal` run was available to read. It will follow once a real one has been captured.
+
 Settings (the ellipsis button) holds a **hover speed** slider from Instant to 1 s, which also scales the quick cards on
 event bars, plus the all-desktops and cache-pricing options.
 
@@ -132,13 +154,19 @@ entry, otherwise five minutes. Prompt text is kept in memory only, for a 100-cha
 <p align="center"><img src="docs/screenshots/session-timeline-zoom.png" alt="The same timeline zoomed to the stretch around the compaction" width="900"></p>
 <p align="center"><sub>Zoomed to the 40 minutes around the compaction: every panel rescales to what is in view.</sub></p>
 
+<p align="center"><img src="docs/screenshots/session-lanes.png" alt="A session timeline with a /loop lane, a sub-agent lane, a test-run lane and a plugin bar under the cost charts" width="900"></p>
+<p align="center"><sub>A self-paced <code>/loop</code> over five iterations: the loop lane (cost per iteration, waits, decision icons), the sub-agent it launched, and a test run per iteration going from red to green.</sub></p>
+
+<p align="center"><img src="docs/screenshots/session-lanes-overlay.png" alt="The same session with the lanes overlaid on the context chart" width="900"></p>
+<p align="center"><sub>The same session with the lane overlay on: loop iterations as vertical bands, decision icons along the top, test runs as red and green dots.</sub></p>
+
 <p align="center"><img src="docs/screenshots/breakdown.png" alt="Drill-down breakdown: donuts, tokens-versus-dollars bars, treemaps, most expensive responses and the 24-hour dial" width="900"></p>
 <p align="center"><sub>The drill-down breakdown for all usage: where the dollars went, by billing kind, model, skill, plugin, tool and project, and when in the day.</sub></p>
 
 ## Commands
 
 ```
-make test      # 233 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
+make test      # 303 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
 make run       # build "KAIkei.app" and open it
 make install   # copy it to ~/Applications
 make icon      # rebuild Resources/AppIcon.icns from Resources/AppIcon-source.png (only after replacing the artwork)
@@ -148,7 +176,8 @@ Sizes S / M / L / XL (top right), a pin to keep it above other windows (or let i
 and a menu to show it on every desktop. Settings are remembered. `--dump` prints what the collector sees;
 `--snapshot L out.png [dark] [sessions=6] [drill=model:claude-sonnet-5-5] [height=1800]` renders a size to a PNG
 without a visible window (`sessions=N` pads the open-session list to test busy days; `drill=` opens a detail page, e.g.
-`total`, `session:live`, `day:3`, `skill:NAME`).
+`total`, `session:live`, `day:3`, `skill:NAME`). `lanes=on` and `lanesoverlay=loop,agents,tests|all` draw the loop,
+sub-agent and test-run lanes' markers on the context chart as well as in their own lanes.
 
 Each size shows the richest layout that fits its window and drops lower-priority pieces (extra sessions first, then
 breakdown rows, the trend strip, the cost split) instead of scrolling. Detail pages do scroll.
@@ -162,6 +191,9 @@ Everything is read locally. No login token or keychain item is read.
 | Open sessions | `~/.claude/sessions/<pid>.json`, kept only if the process is alive |
 | Tokens, models, skills, plugins, tools, thinking tokens, effort | `~/.claude/projects/**/*.jsonl` transcripts (assistant rows) |
 | Prompts, `/clear` and other slash commands, compactions (trigger, tokens before and after) | the same transcripts (user rows and `compact_boundary` rows) |
+| Loop wake-ups, decisions and stops | `scheduled_task_fire` rows, and `ScheduleWakeup` calls and results, in the same transcripts |
+| Sub-agent runs | `Agent` calls and their launch results, plus the sub-agents' own rows (`agentId`) |
+| Test runs | the output of Bash commands that start with a known test runner; only a summary the runner printed is read |
 | Account, license, monthly spend limit and rate-limit windows | identity fields and the `cachedUsageUtilization` entry of `~/.claude.json` (the same figures as the Desktop app's Settings > Usage, as Claude Code caches them) |
 | Exact context %, window size, effort, +/- lines, duration | statusLine JSON in `/tmp/claude-console/sessions/` (only if the Claude Console plugin's handler is installed; optional) |
 

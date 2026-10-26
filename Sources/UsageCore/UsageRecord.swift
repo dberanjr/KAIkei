@@ -16,6 +16,9 @@ public struct UsageRecord: Equatable, Sendable {
     /// Part of `usage.output` spent on extended thinking. It is billed as output; it is split out so it can be shown.
     public var thinkingTokens: Int = 0
     public var effort: String?
+    /// Set on sub-agent rows: which agent run this response belongs to, and the parent's `Agent` tool_use that spawned it.
+    public var agentID: String?
+    public var spawnToolUseID: String?
 
     public func cost(_ billing: CacheWriteBilling) -> Double { Pricing.cost(of: usage, model: model, billing: billing) }
 }
@@ -27,12 +30,19 @@ public struct RecordStore: Sendable {
     /// Prompts, slash commands and compactions, deduplicated by transcript id. Forked sessions replay rows into new files.
     public private(set) var events: [SessionEvent] = []
     private var eventIDs: Set<String> = []
+    /// Loop wake-ups and decisions, sub-agent spawns and test runs, deduplicated by signal id.
+    public private(set) var signals: [FeatureSignal] = []
+    private var signalIDs: Set<String> = []
     private var index: [String: Int] = [:]
 
     public init() {}
 
     public mutating func add(_ event: SessionEvent) {
         if eventIDs.insert(event.id).inserted { events.append(event) }
+    }
+
+    public mutating func add(_ signal: FeatureSignal) {
+        if signalIDs.insert(signal.id).inserted { signals.append(signal) }
     }
 
     public mutating func add(_ rec: UsageRecord) {
@@ -54,6 +64,8 @@ public struct RecordStore: Sendable {
         merged.plugin = merged.plugin ?? rec.plugin
         merged.thinkingTokens = max(merged.thinkingTokens, rec.thinkingTokens)
         merged.effort = merged.effort ?? rec.effort
+        merged.agentID = merged.agentID ?? rec.agentID
+        merged.spawnToolUseID = merged.spawnToolUseID ?? rec.spawnToolUseID
         records[i] = merged
     }
 }

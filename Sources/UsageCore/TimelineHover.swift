@@ -3,12 +3,14 @@ import Foundation
 /// A horizontal band of the timeline stack, in points from its top. Hit-testing needs to know which kind of panel the
 /// pointer is over, because the same x means different things in the model ribbon, the prompt lane and a data panel.
 public struct PanelBand: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case ribbon, prompts, data }
+    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, lane }
     public var kind: Kind
     public var minY: Double
     public var maxY: Double
-    public init(kind: Kind, minY: Double, maxY: Double) {
-        self.kind = kind; self.minY = minY; self.maxY = maxY
+    /// Which feature lane a `.lane` band is, so the pointer knows what it is over.
+    public var lane: FeatureLane?
+    public init(kind: Kind, minY: Double, maxY: Double, lane: FeatureLane? = nil) {
+        self.kind = kind; self.minY = minY; self.maxY = maxY; self.lane = lane
     }
 }
 
@@ -20,6 +22,8 @@ public enum HoverTarget: Equatable, Hashable, Sendable {
     case marker(String)
     /// A stretch of the model ribbon, by span id.
     case modelSpan(String)
+    /// Something in a feature lane.
+    case lane(LaneTarget)
 }
 
 public enum TimelineHitTester {
@@ -37,7 +41,7 @@ public enum TimelineHitTester {
     }
 
     /// What is under the pointer. Nil over gaps between panels and over empty parts of a lane.
-    public static func target(atX px: Double, y: Double, width: Double, bands: [PanelBand], geometry g: TimelineGeometry) -> HoverTarget? {
+    public static func target(atX px: Double, y: Double, width: Double, bands: [PanelBand], geometry g: TimelineGeometry, lanes: FeatureLanes? = nil) -> HoverTarget? {
         guard let band = bands.first(where: { y >= $0.minY && y <= $0.maxY }) else { return nil }
         let x = Self.x(atPixel: px, width: width, geometry: g)
 
@@ -62,6 +66,16 @@ public enum TimelineHitTester {
         case .data:
             if let line = nearestMarker(where: isStructural) { return line }
             return g.nearestCall(to: x).map { .call($0) }
+        case .lane:
+            guard let lane = band.lane, let lanes else { return nil }
+            let perPixel = (g.domain.upperBound - g.domain.lowerBound) / max(width, 1)
+            var row: Int?
+            if lane == .subagents, let rows = lanes.subagents?.rowCount, rows > 0 {
+                // Row 0 is drawn at the bottom of the lane, so count from the bottom.
+                let fraction = (y - band.minY) / max(band.maxY - band.minY, 1)
+                row = rows - 1 - min(rows - 1, max(0, Int(fraction * Double(rows))))
+            }
+            return lanes.target(lane: lane, atX: x, row: row, tolerance: Self.tolerance * perPixel, geometry: g).map { .lane($0) }
         }
     }
 }
@@ -137,10 +151,11 @@ public struct DwellTracker: Equatable, Sendable {
 
 /// One item in the timeline's vertical stack.
 public struct StackItem: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, header }
+    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, header, lane }
     public var kind: Kind
     public var height: Double
-    public init(kind: Kind, height: Double) { self.kind = kind; self.height = height }
+    public var lane: FeatureLane?
+    public init(kind: Kind, height: Double, lane: FeatureLane? = nil) { self.kind = kind; self.height = height; self.lane = lane }
 }
 
 /// The vertical layout of the chart stack, described once so the views and the hit-testing cannot drift apart: the same
@@ -158,6 +173,7 @@ public struct TimelineStackLayout: Equatable, Sendable {
             case .ribbon: out.append(PanelBand(kind: .ribbon, minY: y, maxY: y + item.height))
             case .prompts: out.append(PanelBand(kind: .prompts, minY: y, maxY: y + item.height))
             case .data: out.append(PanelBand(kind: .data, minY: y, maxY: y + item.height))
+            case .lane: out.append(PanelBand(kind: .lane, minY: y, maxY: y + item.height, lane: item.lane))
             case .header: break
             }
             y += item.height + spacing

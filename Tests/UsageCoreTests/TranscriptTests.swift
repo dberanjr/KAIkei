@@ -34,6 +34,19 @@ func assistantLine(
         #expect(abs(rec.timestamp.timeIntervalSince1970 - 1_792_938_350.554) < 0.001)
     }
 
+    @Test func parsesAgentIDAndSpawnIDFromSidechainRows() throws {
+        let line = assistantLine(id: "m1", sidechain: true).replacingOccurrences(
+            of: #""cwd":"/work/proj""#, with: #""cwd":"/work/proj","agentId":"a9556657103b4de13","wireToolInputs":{"toolu_01TWi":{"subagent_type":"fork"}}"#)
+        let rec = try #require(TranscriptParser.parse(line: Data(line.utf8)))
+        #expect(rec.agentID == "a9556657103b4de13")
+        #expect(rec.spawnToolUseID == "toolu_01TWi")
+    }
+
+    @Test func mainThreadRowsHaveNoAgentID() throws {
+        let rec = try #require(TranscriptParser.parse(line: Data(assistantLine(id: "m1").utf8)))
+        #expect(rec.agentID == nil && rec.spawnToolUseID == nil)
+    }
+
     @Test func ignoresNonAssistantLines() {
         let user = #"{"type":"user","message":{"role":"user","content":"hello"},"sessionId":"s1"}"#
         #expect(TranscriptParser.parse(line: Data(user.utf8)) == nil)

@@ -96,7 +96,7 @@ public enum Drilldown {
             to = now.addingTimeInterval(86_400)
         default:
             from = Aggregator.start(of: range, now: now, calendar: calendar)
-            to = now.addingTimeInterval(86_400)
+            to = Aggregator.end(of: range, now: now, calendar: calendar)
         }
         let scoped = matching.filter { $0.timestamp >= from && $0.timestamp < to }
 

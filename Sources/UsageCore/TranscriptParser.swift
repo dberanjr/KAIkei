@@ -33,12 +33,16 @@ public enum TranscriptParser {
 
         let ts = (root["timestamp"] as? String).flatMap { isoFractional.date(from: $0) ?? isoPlain.date(from: $0) }
         let thinking = ((usageDict["output_tokens_details"] as? [String: Any])?["thinking_tokens"] as? NSNumber)?.intValue ?? 0
-        return UsageRecord(
+        let spawnID = (root["wireToolInputs"] as? [String: Any])?.keys.sorted().first { $0.hasPrefix("toolu_") }
+        var record = UsageRecord(
             messageID: messageID, sessionID: sessionID, timestamp: ts ?? Date(),
             model: message["model"] as? String ?? "unknown", usage: usage,
             skill: root["attributionSkill"] as? String, plugin: root["attributionPlugin"] as? String,
             tools: tools, cwd: root["cwd"] as? String, isSidechain: root["isSidechain"] as? Bool ?? false,
             thinkingTokens: thinking, effort: root["effort"] as? String)
+        record.agentID = root["agentId"] as? String
+        record.spawnToolUseID = spawnID
+        return record
     }
 
     static func parseUsage(_ u: [String: Any]) -> TokenUsage {

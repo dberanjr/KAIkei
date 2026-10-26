@@ -3,6 +3,7 @@
 
     scripts/make_demo_home.py OUT_DIR PID1,PID2,PID3
 
+Also writes one finished /loop session (OUT_DIR/lanes-session-id holds its id) so the feature lanes have data.
 Writes OUT_DIR/.claude.json, OUT_DIR/.claude/projects/**.jsonl (30 days of invented history) and
 OUT_DIR/.claude/sessions/<pid>.json for three "open" sessions. KAIkei treats a session as open only while its
 process exists, so pass the pids of three long-running processes (scripts/screenshots.sh starts `sleep`s for this).
@@ -120,6 +121,106 @@ def write_session(rows, project_cwd, sid):
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
 
 
+def loop_session():
+    """A finished, self-paced /loop over the payments tests: five iterations, one sub-agent, and a test run in each.
+
+    Written as the rows Claude Code writes (wake-up fire rows, ScheduleWakeup calls and results, an Agent launch result,
+    sidechain rows with an agentId, pytest summaries), so the feature lanes have something to draw. Returns the session id.
+    """
+    name, cwd = "payments-api", "/Users/ana/work/payments-api"
+    sid = str(uuid.UUID(int=rng.getrandbits(128)))
+    model, ctx = "claude-sonnet-5-5", 24_000
+    rows = []
+    skill = ("superpowers:test-driven-development", "superpowers")
+
+    def uid():
+        return str(uuid.UUID(int=rng.getrandbits(128)))
+
+    def user(t, content, **extra):
+        r = {"type": "user", "sessionId": sid, "uuid": uid(), "timestamp": iso(t), "cwd": cwd, "isSidechain": False,
+             "message": {"role": "user", "content": content}}
+        r.update(extra)
+        rows.append(r)
+
+    def call(t, blocks, sidechain=False, agent=None, attributed=False):
+        nonlocal ctx
+        new = rng.randint(1_200, 4_500)
+        ctx += 0 if sidechain else new
+        read = rng.randint(8_000, 20_000) if sidechain else ctx - new
+        r = {"type": "assistant", "sessionId": sid, "uuid": uid(), "timestamp": iso(t), "cwd": cwd, "isSidechain": sidechain,
+             "message": {"id": rid("msg"), "model": model, "role": "assistant", "content": blocks,
+                         "usage": {"input_tokens": rng.randint(3, 30), "output_tokens": rng.randint(300, 1_600),
+                                   "cache_creation_input_tokens": new, "cache_read_input_tokens": read,
+                                   "cache_creation": {"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": new},
+                                   "output_tokens_details": {"thinking_tokens": 0}}}}
+        if agent:
+            r["agentId"] = agent
+        if attributed and not sidechain:
+            r["attributionSkill"], r["attributionPlugin"] = skill
+        rows.append(r)
+
+    def tool(name_, inp):
+        return {"type": "tool_use", "id": rid("toolu"), "name": name_, "input": inp}
+
+    def tool_result(t, block, content, **extra):
+        r = {"type": "user", "sessionId": sid, "uuid": uid(), "timestamp": iso(t), "cwd": cwd, "isSidechain": False,
+             "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": block["id"], "content": content}]}}
+        r.update(extra)
+        rows.append(r)
+
+    args = "Keep iterating on the retry tests until they are all green, one fix per iteration"
+    t0 = NOW - timedelta(minutes=215)
+    user(t0, args)
+    start_call = tool("Skill", {"skill": "loop", "args": args})
+    call(t0 + timedelta(seconds=6), [start_call])
+
+    summaries = ["3 failed, 9 passed", "1 failed, 11 passed", "1 failed, 12 passed", "13 passed", "13 passed"]
+    waits = [20, 25, 15, 20]
+    t = t0 + timedelta(seconds=30)
+    agent_id = f"a{rng.getrandbits(64):016x}"
+    for i in range(5):
+        if i > 0:  # the harness wakes Claude, then types the /loop prompt
+            rows.append({"type": "system", "subtype": "scheduled_task_fire", "sessionId": sid, "uuid": uid(), "timestamp": iso(t),
+                         "isSidechain": False, "taskId": f"{rng.getrandbits(32):08x}", "cron": f"{t.minute} {t.hour} * * *",
+                         "prompt": "/loop " + args, "taskKind": "loop", "cronKind": "loop", "cwd": cwd})
+            t += timedelta(milliseconds=9)
+            user(t, f"<command-message>loop</command-message> <command-name>/loop</command-name> <command-args>{args}</command-args>")
+        for k in range(rng.randint(4, 6)):
+            blocks = [tool(rng.choice(["Read", "Edit", "Grep", "Edit"]), {})]
+            call(t, blocks, attributed=rng.random() < 0.4)
+            t += timedelta(seconds=rng.randint(15, 45))
+            if k == 1 and i == 1:  # a sub-agent reviews edge cases while the loop carries on
+                spawn = tool("Agent", {"subagent_type": "general-purpose", "description": "Review backoff edge cases", "prompt": "..."})
+                call(t, [spawn])
+                tool_result(t + timedelta(seconds=1), spawn, "Async agent launched",
+                            toolUseResult={"isAsync": True, "status": "async_launched", "agentId": agent_id, "description": "Review backoff edge cases"})
+                at = t + timedelta(seconds=4)
+                for _ in range(6):
+                    call(at, [tool("Read", {})], sidechain=True, agent=agent_id)
+                    at += timedelta(seconds=rng.randint(20, 40))
+            if k == 2:  # run the tests
+                run = tool("Bash", {"command": f'cd "{cwd}" && pytest -q'})
+                call(t, [run])
+                tool_result(t + timedelta(seconds=12), run, f"...\n======= {summaries[i]} in 0.52s =======")
+                t += timedelta(seconds=rng.randint(20, 40))
+        if i < 4:
+            delay = waits[i] * 60
+            sched = tool("ScheduleWakeup", {"delaySeconds": delay, "noop": False, "prompt": "/loop " + args, "reason": "Re-run the tests after the next fix"})
+            call(t, [sched])
+            due = t + timedelta(seconds=delay)
+            tool_result(t + timedelta(seconds=1), sched, "Next wakeup scheduled",
+                        toolUseResult={"scheduledFor": int(due.timestamp() * 1000), "clampedDelaySeconds": delay, "wasClamped": False})
+            t = due + timedelta(seconds=rng.randint(4, 20))
+        else:
+            stop = tool("ScheduleWakeup", {"stop": True})
+            call(t, [stop])
+            tool_result(t + timedelta(seconds=1), stop, "Loop stopped")
+    write_session(rows, cwd, sid)
+    with open(os.path.join(HOME, "lanes-session-id"), "w") as f:
+        f.write(sid)
+    return sid
+
+
 def main():
     os.makedirs(os.path.join(HOME, ".claude", "sessions"), exist_ok=True)
     names = list(PROJECTS)
@@ -141,6 +242,11 @@ def main():
             sid = str(uuid.UUID(int=rng.getrandbits(128)))
             rows, _ = session_rows(sid, cwd, start, n, plan, PROJECTS[name]["skills"], compact_at=rng.randint(40, 70) if n > 75 else None)
             write_session(rows, cwd, sid)
+
+    # Drawn from a saved state and put back, so adding this session does not change the other sessions' numbers.
+    state = rng.getstate()
+    loop_session()
+    rng.setstate(state)
 
     # Three open sessions, each tied to a live pid.
     live = [
