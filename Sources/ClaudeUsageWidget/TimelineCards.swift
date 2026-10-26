@@ -1,0 +1,265 @@
+import SwiftUI
+import UsageCore
+
+/// The card that follows the pointer. Material background, hairline border, soft shadow: it floats above the charts
+/// without hiding what is under it more than it must.
+private struct CardChrome<Content: View>: View {
+    let width: CGFloat
+    @ViewBuilder let content: Content
+    var body: some View {
+        content
+            .padding(12)
+            .frame(width: width, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.22), radius: 10, y: 3)
+    }
+}
+
+private func clock(_ date: Date, seconds: Bool = true) -> String {
+    date.formatted(seconds ? .dateTime.hour().minute().second() : .dateTime.hour().minute())
+}
+
+private func promptOrdinal(_ id: String, in timeline: SessionTimeline) -> Int? {
+    timeline.markers.filter { if case .prompt = $0.kind { true } else { false } }.firstIndex { $0.id == id }.map { $0 + 1 }
+}
+
+private func promptPreview(turn: Int, in timeline: SessionTimeline) -> String? {
+    let prompts = timeline.markers.compactMap { m -> String? in if case .prompt(let p) = m.kind { p } else { nil } }
+    return turn >= 1 && turn <= prompts.count ? prompts[turn - 1] : nil
+}
+
+private struct Row: View {
+    let label: String, value: String
+    var detail: String?
+    var swatch: Color?
+    var body: some View {
+        HStack(spacing: 6) {
+            if let swatch { RoundedRectangle(cornerRadius: 2).fill(swatch).frame(width: 8, height: 8) }
+            Text(label).foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(value).monospacedDigit()
+            if let detail { Text(detail).foregroundStyle(.tertiary).monospacedDigit().frame(width: 44, alignment: .trailing) }
+        }
+        .font(.caption)
+    }
+}
+
+/// Everything about one call: the "time slice" that ends at it.
+struct CallCard: View {
+    let call: CallPoint
+    let index: Int
+    let timeline: SessionTimeline
+    var width: CGFloat = 320
+
+    private var previousMain: CallPoint? {
+        guard !call.isSidechain else { return nil }
+        return timeline.calls[..<index].last { !$0.isSidechain }
+    }
+
+    var body: some View {
+        let window = timeline.contextWindow
+        let context = max(call.contextTokens, 1)
+        let slice = previousMain.map { timeline.markers(after: $0.time, through: call.time) } ?? []
+        CardChrome(width: width) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Call \(index + 1) of \(timeline.calls.count)").font(.callout.weight(.semibold))
+                    Spacer()
+                    Text(clock(call.time)).font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                }
+                HStack(spacing: 6) {
+                    Circle().fill(Theme.color(ModelFamily(modelID: call.model))).frame(width: 8, height: 8)
+                    Text(ModelFamily.displayName(modelID: call.model) + (call.effort.map { " · \($0)" } ?? "")).font(.callout)
+                    if call.isSidechain { Text("sub-agent").font(.caption).foregroundStyle(.secondary) }
+                }
+                if let preview = promptPreview(turn: call.turn, in: timeline) {
+                    Text("Prompt \(call.turn): “\(preview)”").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Divider()
+                contextSection(window: window, total: context)
+                Divider()
+                costSection
+                Divider()
+                cacheSection
+                if !call.tools.isEmpty || call.skill != nil { toolsSection }
+                if !slice.isEmpty { eventsSection(slice) }
+            }
+        }
+    }
+
+    private func contextSection(window: Int, total: Int) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Context").font(.caption.weight(.semibold))
+                Text(Fmt.tokens(call.contextTokens)).font(.callout.weight(.semibold)).monospacedDigit()
+                if window > 0 { Text("\(Fmt.percent(Double(call.contextTokens) / Double(window) * 100)) of \(Fmt.tokens(window))").font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                if let delta = contextDelta { Text(delta).font(.caption).foregroundStyle(.secondary).monospacedDigit() }
+            }
+            GeometryReader { g in
+                HStack(spacing: 1) {
+                    Rectangle().fill(Theme.ramp[0]).frame(width: g.size.width * Double(call.cacheRead) / Double(total))
+                    Rectangle().fill(Theme.ramp[1]).frame(width: max(call.cacheWrite > 0 ? 2 : 0, g.size.width * Double(call.cacheWrite) / Double(total)))
+                    Rectangle().fill(Theme.ramp[3]).frame(width: max(call.freshInput > 0 ? 2 : 0, g.size.width * Double(call.freshInput) / Double(total)))
+                }.clipShape(Capsule())
+            }.frame(height: 7)
+            Row(label: "Cache read", value: Fmt.tokens(call.cacheRead), detail: Fmt.percent(Double(call.cacheRead) / Double(total) * 100), swatch: Theme.ramp[0])
+            Row(label: "Cache write", value: Fmt.tokens(call.cacheWrite), detail: Fmt.percent(Double(call.cacheWrite) / Double(total) * 100), swatch: Theme.ramp[1])
+            Row(label: "Uncached input", value: Fmt.tokens(call.freshInput), detail: Fmt.percent(Double(call.freshInput) / Double(total) * 100), swatch: Theme.ramp[3])
+            Row(label: "Output", value: Fmt.tokens(call.output), detail: call.thinkingTokens > 0 ? "\(Fmt.tokens(call.thinkingTokens)) thinking" : nil, swatch: Theme.ramp[2])
+        }
+    }
+
+    /// Change in context since the previous main-thread call, which is how a compaction or a big file read shows up.
+    private var contextDelta: String? {
+        guard let previous = previousMain else { return nil }
+        let delta = call.contextTokens - previous.contextTokens
+        if delta == 0 { return "no change" }
+        return (delta > 0 ? "+" : "−") + Fmt.tokens(abs(delta)) + " since previous"
+    }
+
+    private var costSection: some View {
+        let p = call.costParts
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Cost").font(.caption.weight(.semibold))
+                Text(Fmt.money(call.cost)).font(.callout.weight(.semibold)).monospacedDigit()
+                Spacer()
+            }
+            Row(label: "Cache reads", value: Fmt.money(p.cacheRead), swatch: Theme.ramp[0])
+            Row(label: "Cache writes", value: Fmt.money(p.cacheWrite), swatch: Theme.ramp[1])
+            Row(label: "Output", value: Fmt.money(p.output), swatch: Theme.ramp[2])
+            Row(label: "Input", value: Fmt.money(p.input), swatch: Theme.ramp[3])
+            let total = timeline.totalCost
+            Row(label: "Session so far", value: Fmt.money(call.cumulativeCost),
+                detail: total > 0 ? Fmt.percent(call.cumulativeCost / total * 100) : nil)
+        }
+    }
+
+    private var cacheSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let gap = call.idleGap {
+                Text("\(gap < 60 ? "\(Int(gap))s" : Fmt.duration(Int(gap))) since the previous call").font(.caption).foregroundStyle(.secondary)
+            }
+            if call.cacheExpired {
+                Label("Cache had expired: the context was re-written", systemImage: "snowflake").font(.caption).foregroundStyle(Theme.accent)
+            } else if call.cacheRead > 0 {
+                Label("Cache hit: \(Fmt.percent(Double(call.cacheRead) / Double(max(call.contextTokens, 1)) * 100)) of the context read from cache", systemImage: "bolt.fill")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var toolsSection: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if !call.tools.isEmpty {
+                let counts = Dictionary(call.tools.map { ($0, 1) }, uniquingKeysWith: +).sorted { ($0.value, $1.key) > ($1.value, $0.key) }
+                Text("Tools: " + counts.map { $0.value > 1 ? "\($0.key) ×\($0.value)" : $0.key }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            if let skill = call.skill { Text("Skill: \(skill)").font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+
+    private func eventsSection(_ slice: [TimelineMarker]) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Divider()
+            Text("In this slice").font(.caption.weight(.semibold))
+            ForEach(slice) { m in
+                switch m.kind {
+                case .prompt(let p): Text("Prompt \(promptOrdinal(m.id, in: timeline).map(String.init) ?? "?"): “\(p)”").lineLimit(1)
+                case .compact(let trigger, let pre, let post, _):
+                    Text("Compaction (\(trigger))" + (pre.flatMap { a in post.map { " \(Fmt.tokens(a))→\(Fmt.tokens($0))" } } ?? ""))
+                case .clear: Text("Context cleared")
+                case .command(let name): Text(name)
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// A prompt, a compaction or a clear.
+struct MarkerCard: View {
+    let marker: TimelineMarker
+    let timeline: SessionTimeline
+    var width: CGFloat = 290
+
+    var body: some View {
+        CardChrome(width: width) {
+            VStack(alignment: .leading, spacing: 6) {
+                switch marker.kind {
+                case .prompt(let preview): prompt(preview)
+                case .compact(let trigger, let pre, let post, let ms): compaction(trigger, pre, post, ms)
+                case .clear: clear
+                case .command(let name): header(name, "Command")
+                }
+            }
+        }
+    }
+
+    private func header(_ title: String, _ kind: String) -> some View {
+        HStack {
+            Text(title).font(.callout.weight(.semibold))
+            Spacer()
+            Text(clock(marker.time)).font(.callout).foregroundStyle(.secondary).monospacedDigit()
+        }
+    }
+
+    @ViewBuilder private func prompt(_ preview: String) -> some View {
+        let n = promptOrdinal(marker.id, in: timeline)
+        header("Prompt \(n.map(String.init) ?? "")", "Prompt")
+        Text("“\(preview)”").font(.callout).fixedSize(horizontal: false, vertical: true)
+        if let n, let turn = timeline.turnSummary(n) {
+            Divider()
+            Text("Answered with \(Fmt.count(turn.calls, "call")) · \(Fmt.money(turn.cost)) · \(Fmt.tokens(turn.outputTokens)) output tokens")
+                .font(.caption).foregroundStyle(.secondary)
+            Text("Took \(Fmt.duration(max(0, Int(turn.end.timeIntervalSince(turn.start)))))").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private func compaction(_ trigger: String, _ pre: Int?, _ post: Int?, _ ms: Int?) -> some View {
+        header("Compaction (\(trigger))", "Compaction")
+        if let pre, let post {
+            Text("\(Fmt.tokens(pre)) → \(Fmt.tokens(post)) tokens").font(.callout).monospacedDigit()
+            Text("\(Fmt.tokens(max(0, pre - post))) freed from the context window").font(.caption).foregroundStyle(.secondary)
+        }
+        if let ms { Text("The summary took \(ms >= 1000 ? "\(ms / 1000)s" : "\(ms)ms")").font(.caption).foregroundStyle(.secondary) }
+        if let next = timeline.mainCalls.first(where: { $0.time > marker.time }) {
+            Divider()
+            Text("First call after: \(Fmt.money(next.cost)) · wrote \(Fmt.tokens(next.cacheWrite)) to the cache").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var clear: some View {
+        header("Context cleared", "Clear")
+        Text("A fresh conversation starts here. Nothing before it is carried forward, so the context begins nearly empty.")
+            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A stretch of the model ribbon.
+struct ModelSpanCard: View {
+    let span: ModelSpan
+    let timeline: SessionTimeline
+    var width: CGFloat = 270
+
+    var body: some View {
+        let peak = timeline.mainCalls.filter { $0.time >= span.start && $0.time <= span.end }.map(\.contextTokens).max() ?? 0
+        CardChrome(width: width) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle().fill(Theme.color(ModelFamily(modelID: span.model))).frame(width: 9, height: 9)
+                    Text(ModelFamily.displayName(modelID: span.model)).font(.callout.weight(.semibold))
+                    Spacer()
+                    Text(span.model).font(.caption).foregroundStyle(.tertiary)
+                }
+                Text("\(clock(span.start, seconds: false)) to \(clock(span.end, seconds: false)) · \(Fmt.duration(max(0, Int(span.end.timeIntervalSince(span.start)))))")
+                    .font(.caption).foregroundStyle(.secondary)
+                Divider()
+                Text("\(Fmt.count(span.callCount, "call")) · \(Fmt.money(span.cost))").font(.caption).foregroundStyle(.secondary)
+                Text("Context peaked at \(Fmt.tokens(peak)) on this model").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}

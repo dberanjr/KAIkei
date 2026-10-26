@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Claude Code App Icon Preview</title>
+  <style>
+    body {
+      background-color: #0E1116; /* Dark wallpaper background */
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .icon-wrapper {
+      width: 320px;
+      height: 320px;
+      filter: drop-shadow(0px 24px 30px rgba(0, 0, 0, 0.7)) drop-shadow(0px 4px 12px rgba(0, 0, 0, 0.45));
+    }
+    .label {
+      color: #8A99AD;
+      margin-top: 24px;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="icon-wrapper">
+    <svg xmlns="http://w3.org" viewBox="0 0 512 512" width="100%" height="100%">
+      <defs>
+        <!-- App Squircle Mask -->
+        <clipPath id="squircle">
+          <path d="M 512,128 C 512,24 488,0 384,0 L 128,0 C 24,0 0,24 0,128 L 0,384 C 0,488 24,512 128,512 L 384,512 C 488,512 512,488 512,384 Z"/>
+        </clipPath>
+
+        <!-- Premium Monolithic Background -->
+        <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1B1D24"/>
+          <stop offset="50%" stop-color="#12141A"/>
+          <stop offset="100%" stop-color="#0A0C0E"/>
+        </linearGradient>
+        
+        <!-- App Bezel Border Highlight -->
+        <linearGradient id="borderGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.5"/>
+        </linearGradient>
+
+        <!-- Claude Brand Color Palettes -->
+        <linearGradient id="claudeCoral" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#FF8A65"/>
+          <stop offset="100%" stop-color="#CC5A37"/>
+        </linearGradient>
+
+        <linearGradient id="claudeGold" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#F59E0B"/>
+          <stop offset="100%" stop-color="#D97706"/>
+        </linearGradient>
+
+        <!-- Intense Telemetry Glows -->
+        <filter id="coreGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="12" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        
+        <filter id="ambientBackdrop" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="40" result="blur" />
+        </filter>
+      </defs>
+
+      <!-- Main macOS Squircle Tile -->
+      <g clip-path="url(#squircle)">
+        <rect width="512" height="512" fill="url(#bgGrad)"/>
+        
+        <!-- Terminal Grid / Code Telemetry Background Matrix -->
+        <g stroke="#CC5A37" stroke-width="1.5" opacity="0.06">
+          <path d="M 0,80 L 512,80 M 0,160 L 512,160 M 0,240 L 512,240 M 0,320 L 512,320 M 0,400 L 512,400 M 0,480 L 512,480" />
+          <path d="M 80,0 L 80,512 M 160,0 L 160,512 M 240,0 L 240,512 M 320,0 L 320,512 M 400,0 L 400,512 M 480,0 L 480,512" />
+        </g>
+        
+        <!-- Real-Time Activity Graph Lines in Bottom Layer -->
+        <path d="M 0,420 Q 120,400 180,320 T 340,180 T 512,90" fill="none" stroke="url(#claudeCoral)" stroke-width="3" opacity="0.15"/>
+        <path d="M 0,440 Q 140,430 220,380 T 380,120 T 512,60" fill="none" stroke="url(#claudeGold)" stroke-width="1.5" opacity="0.1"/>
+
+        <!-- Deep Ambient Core Radiant Backlight -->
+        <circle cx="256" cy="245" r="110" fill="#CC5A37" opacity="0.18" filter="url(#ambientBackdrop)"/>
+
+        <!-- CENTRAL COMPELLING ICONOGRAPHY: THE CLAUDE CODE MONSTER METRIC -->
+        <g transform="translate(256, 245)">
+          
+          <!-- BACKGROUND LAYER: Real-time Bar Analytics wrapping the core -->
+          <g opacity="0.25" stroke-linecap="round">
+            <!-- Long term historical steps scaling up -->
+            <line x1="-190" y1="120" x2="-190" y2="60" stroke="#CC5A37" stroke-width="8"/>
+            <line x1="-160" y1="120" x2="-160" y2="20" stroke="#CC5A37" stroke-width="8"/>
+            <line x1="-130" y1="120" x2="-130" y2="-30" stroke="#CC5A37" stroke-width="8"/>
+            <!-- Real time monitoring bounds -->
+            <circle cx="160" cy="-120" r="4" fill="#F59E0B" filter="url(#coreGlow)"/>
+            <line x1="160" y1="120" x2="160" y2="-110" stroke="url(#claudeGold)" stroke-width="6" stroke-dasharray="4 8"/>
+          </g>
+
+          <!-- MIDDLE LAYER: The Mega-Sized Premium Dollar Sign Structure -->
+          <!-- Two vertical precision stroke columns -->
+          <rect x="-24" y="-190" width="14" height="380" rx="7" fill="url(#claudeCoral)" opacity="0.85" />
+          <rect x="10" y="-190" width="14" height="380" rx="7" fill="url(#claudeCoral)" opacity="0.85" />
+          
+          <!-- Massive Bold Outer Dollar Curves Wrap -->
+          <path d="M -110,-95 C -110,-200 110,-200 110,-95 C 110,-15 -110,-15 -110,65 C -110,170 110,170 110,65" 
+                fill="none" stroke="url(#claudeCoral)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" />
+
+          <!-- FOREGROUND LAYER: The High-Tech Masked Vertical Split containing Claude's Core Element -->
+          <g filter="url(#coreGlow)">
+            <!-- Central Dark Cutout Axis to visually house the AI engine -->
+            <rect x="-45" y="-105" width="90" height="210" rx="16" fill="#0E1116" stroke="url(#claudeGold)" stroke-width="3" />
+            
+            <!-- Precise Claude Signature Multi-Aperture/Spark Icon -->
+            <g transform="translate(0, 0) scale(1.1)">
+              <!-- Main structural geometric hulls overlapping -->
+              <path d="M 0,-42 C 18,-42 32,-24 18,0 C 32,24 18,42 0,42 C -18,42 -32,24 -18,0 C -32,-24 -18,-42 0,-42 Z" fill="url(#claudeGold)" />
+              <path d="M 0,-42 C 18,-42 32,-24 18,0 C 32,24 18,42 0,42 C -18,42 -32,24 -18,0 C -32,-24 -18,-42 0,-42 Z" fill="url(#claudeGold)" transform="rotate(45)" opacity="0.9" />
+              <!-- Deep AI Center Node -->
+              <circle cx="0" cy="0" r="10" fill="#ffffff" />
+              <circle cx="0" cy="0" r="4" fill="#12141A" />
+            </g>
+            
+            <!-- Matrix/Code HUD brackets framing the Claude Spark -->
+            <path d="M -30,-85 L -35,-85 L -35,-65" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.4"/>
+            <path d="M 30,-85 L 35,-85 L 35,-65" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.4"/>
+            <path d="M -30,85 L -35,85 L -35,65" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.4"/>
+            <path d="M 30,85 L 35,85 L 35,65" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.4"/>
+          </g>
+
+        </g>
+
+        <!-- Native macOS Outer Edge Shadow Wrap (Simulating dimensional light) -->
+        <path d="M 512,128 C 512,24 488,0 384,0 L 128,0 C 24,0 0,24 0,128 L 0,384 C 0,488 24,512 128,512 L 384,512 C 488,512 512,488 512,384 Z" fill="none" stroke="url(#borderGrad)" stroke-width="4"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="label">Claude Code Custom macOS App Icon</div>
+
+</body>
+</html>
