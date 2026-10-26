@@ -28,6 +28,24 @@ func tevent(_ id: String, minute: Double, _ kind: SessionEvent.Kind, session: St
         Timelines.build(records: records, events: events, sessionID: session)
     }
 
+    @Test func callsCarryPluginAndAgent() {
+        var r = tcall("a", minute: 1, sidechain: true)
+        r.plugin = "superpowers"; r.agentID = "ag1"; r.spawnToolUseID = "toolu_x"
+        let c = build([r]).calls[0]
+        #expect(c.plugin == "superpowers" && c.agentID == "ag1" && c.spawnToolUseID == "toolu_x")
+    }
+
+    @Test func mergingDuplicateRowsKeepsAgentID() {
+        var store = RecordStore()
+        var first = tcall("a", minute: 1, sidechain: true)
+        var second = first
+        second.agentID = "ag1"; second.spawnToolUseID = "toolu_x"
+        first.agentID = nil
+        store.add(first); store.add(second)
+        #expect(store.records.count == 1)
+        #expect(store.records[0].agentID == "ag1" && store.records[0].spawnToolUseID == "toolu_x")
+    }
+
     @Test func callsAreTimeOrderedAndCarryContextCompositionAndCost() throws {
         let t = build([tcall("b", minute: 5, input: 10, read: 800, write5m: 190), tcall("a", minute: 1, input: 1_000_000, output: 0)])
         #expect(t.calls.map(\.id) == ["a", "b"])
