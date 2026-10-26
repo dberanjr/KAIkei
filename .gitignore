@@ -9,3 +9,6 @@
 /AppIcon/*.webp
 # Superseded by Resources/AppIcon-source.png.
 /ClaudeCodeUsageAppIconv3.png
+
+# Local brainstorming and plan-execution scratch
+.superpowers/
