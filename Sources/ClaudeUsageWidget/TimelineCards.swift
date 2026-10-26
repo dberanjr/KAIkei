@@ -56,9 +56,9 @@ private struct TableRow: View {
             else { Color.clear.frame(width: 8, height: 8) }
             Text(label).foregroundStyle(.secondary)
             Spacer(minLength: 8)
-            Text(tokens).frame(width: 52, alignment: .trailing)
-            Text(share).foregroundStyle(header ? .secondary : .tertiary).frame(width: 78, alignment: .trailing).lineLimit(1)
-            Text(cost).frame(width: 54, alignment: .trailing)
+            Text(tokens).frame(width: 46, alignment: .trailing)
+            Text(share).foregroundStyle(header ? .secondary : .tertiary).frame(width: 38, alignment: .trailing).lineLimit(1)
+            Text(cost).frame(width: 52, alignment: .trailing)
         }
         .font(header ? .caption2 : .caption).monospacedDigit()
         .foregroundStyle(header ? .tertiary : .primary)
@@ -138,7 +138,10 @@ struct CallCard: View {
             TableRow(label: "Cache read", tokens: Fmt.tokens(call.cacheRead), share: Fmt.percent(Double(call.cacheRead) / Double(total) * 100), cost: Fmt.money(p.cacheRead), swatch: Theme.ramp[0])
             TableRow(label: "Cache write", tokens: Fmt.tokens(call.cacheWrite), share: Fmt.percent(Double(call.cacheWrite) / Double(total) * 100), cost: Fmt.money(p.cacheWrite), swatch: Theme.ramp[1])
             TableRow(label: "Uncached input", tokens: Fmt.tokens(call.freshInput), share: Fmt.percent(Double(call.freshInput) / Double(total) * 100), cost: Fmt.money(p.input), swatch: Theme.ramp[3])
-            TableRow(label: "Output", tokens: Fmt.tokens(call.output), share: call.thinkingTokens > 0 ? "\(Fmt.tokens(call.thinkingTokens)) thinking" : "", cost: Fmt.money(p.output), swatch: Theme.ramp[2])
+            TableRow(label: "Output", tokens: Fmt.tokens(call.output), share: "", cost: Fmt.money(p.output), swatch: Theme.ramp[2])
+            if call.thinkingTokens > 0 {
+                Text("\(Fmt.tokens(call.thinkingTokens)) of the output was thinking").font(.caption2).foregroundStyle(.tertiary).padding(.leading, 14)
+            }
             Divider()
             HStack(alignment: .firstTextBaseline) {
                 RoundedRectangle(cornerRadius: 2).fill(Theme.seriesCostPerCall).frame(width: 8, height: 8)
