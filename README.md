@@ -32,7 +32,7 @@ cd KAIkei
 make install   # builds KAIkei.app and copies it to ~/Applications
 ```
 
-Or grab `KAIkei-0.2.0-macOS-arm64.zip` from the [latest release](https://github.com/dberanjr/KAIkei/releases/latest). The
+Or grab `KAIkei-0.2.1-macOS-arm64.zip` from the [latest release](https://github.com/dberanjr/KAIkei/releases/latest). The
 build is ad-hoc signed, not notarized, so on first launch right-click the app and choose **Open** (or run
 `xattr -dr com.apple.quarantine KAIkei.app`).
 
