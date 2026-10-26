@@ -227,7 +227,37 @@ struct SessionTimelineView: View {
                 HStack(spacing: 6) { ForEach(TimelineSeries.allCases) { series in chip(series, g) } }
                 VStack(alignment: .leading, spacing: 5) { ForEach(TimelineSeries.allCases) { series in chip(series, g) } }
             }
+            if lanes.present.contains(where: \.canOverlay) { featureOverlayToggle }
         }
+    }
+
+    /// Draws the loop, sub-agent and test markers on the context chart too. Off by default; the lanes below always show them.
+    private var featureOverlayToggle: some View {
+        HStack(spacing: 8) {
+            Toggle(isOn: $store.featureOverlayOn) { Text("Overlay lanes on the context chart").font(.caption.weight(.semibold)) }
+                .toggleStyle(.switch).controlSize(.mini)
+            if store.featureOverlayOn {
+                ForEach(lanes.present.filter(\.canOverlay)) { lane in laneChip(lane) }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func laneChip(_ lane: FeatureLane) -> some View {
+        let on = store.featureOverlayLanes.contains(lane)
+        return Button {
+            if on { store.featureOverlayLanes.remove(lane) } else { store.featureOverlayLanes.insert(lane) }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(lane.color)
+                Text(lane.title).fontWeight(.medium)
+            }
+            .font(.caption).lineLimit(1)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(Capsule().fill(on ? lane.color.opacity(0.14) : Color.clear))
+            .overlay(Capsule().stroke(on ? lane.color : Color.primary.opacity(0.2), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     private func chip(_ series: TimelineSeries, _ g: TimelineGeometry) -> some View {
@@ -507,6 +537,7 @@ struct SessionTimelineView: View {
             ForEach(overlaid) { series in
                 overlayLine(series, calls: scaled, top: top, peak: peak(of: series, g), base: base, g: g)
             }
+            if store.featureOverlayOn { featureOverlayMarks(lanes, selected: store.featureOverlayLanes, g: g, top: top) }
             eventRules(g, labels: density.showsLabels)
         }
         .chartForegroundStyleScale(domain: Self.layerNames, range: [Theme.ramp[0], Theme.ramp[1], Theme.ramp[3]])

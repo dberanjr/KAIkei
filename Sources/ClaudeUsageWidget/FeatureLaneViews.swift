@@ -264,3 +264,49 @@ struct PluginLaneBar: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
+
+extension FeatureLane {
+    /// Lanes that have something to draw on the context chart. The plugin lane is a session total, so it stays a lane.
+    var canOverlay: Bool { self == .loop || self == .subagents || self == .tests }
+}
+
+/// The lanes' markers drawn on the context chart: loop iterations as translucent vertical bands with their decision icons
+/// along the top, sub-agent runs as thin bars along the bottom, and test runs as dots just under the top.
+@ChartContentBuilder
+func featureOverlayMarks(_ lanes: FeatureLanes, selected: Set<FeatureLane>, g: TimelineGeometry, top: Double) -> some ChartContent {
+    let minWidth = (g.domain.upperBound - g.domain.lowerBound) * 0.006
+    if selected.contains(.loop), let loop = lanes.loop {
+        ForEach(loop.iterations) { it in
+            let x0 = g.x(time: it.start)
+            RectangleMark(
+                xStart: .value("Iteration start", x0), xEnd: .value("Iteration end", max(g.x(endingAt: it.end), x0 + minWidth)),
+                yStart: .value("Bottom", 0), yEnd: .value("Top", top))
+                .foregroundStyle(FeatureLane.loop.color.opacity(0.16))
+            if it.startedBy == .fallbackWake {
+                PointMark(x: .value("Fallback wake", x0), y: .value("Icon", top * 0.93)).opacity(0)
+                    .annotation(position: .overlay) { laneIcon("exclamationmark.triangle.fill", Theme.caution) }
+            }
+        }
+        ForEach(loop.decisions) { d in
+            PointMark(x: .value("Decision", g.x(time: d.time)), y: .value("Icon", top * 0.93)).opacity(0)
+                .annotation(position: .overlay) { laneIcon(d.kind.symbol, FeatureLane.loop.color) }
+        }
+    }
+    if selected.contains(.subagents), let agents = lanes.subagents {
+        ForEach(agents.runs) { run in
+            let x0 = g.x(time: run.start)
+            let floor = top * 0.025 * Double(run.row)
+            RectangleMark(
+                xStart: .value("Run start", x0), xEnd: .value("Run end", max(g.x(endingAt: run.end), x0 + minWidth)),
+                yStart: .value("Row bottom", floor), yEnd: .value("Row top", floor + top * 0.02))
+                .foregroundStyle(FeatureLane.subagents.color.opacity(0.8))
+        }
+    }
+    if selected.contains(.tests), let tests = lanes.tests {
+        ForEach(tests.runs) { run in
+            let color: Color = run.summary.map { $0.failed == 0 && $0.total > 0 ? Theme.good : Theme.critical } ?? Color.secondary
+            PointMark(x: .value("Test run", g.x(time: run.time)), y: .value("Dot", top * 0.82)).symbolSize(34)
+                .foregroundStyle(color)
+        }
+    }
+}
