@@ -91,6 +91,13 @@ final class UsageStore: ObservableObject {
     @Published var overlays: Set<TimelineSeries> {
         didSet { defaults.set(overlays.map(\.rawValue).sorted(), forKey: "overlays") }
     }
+    /// Also draws the feature lanes' markers (loop iterations, sub-agent runs, test runs) on the context chart. Off by default:
+    /// the lanes under the chart already show them.
+    @Published var featureOverlayOn: Bool { didSet { defaults.set(featureOverlayOn, forKey: "featureOverlayOn") } }
+    /// Which lanes are drawn on the context chart while `featureOverlayOn` is set.
+    @Published var featureOverlayLanes: Set<FeatureLane> {
+        didSet { defaults.set(featureOverlayLanes.map(\.rawValue).sorted(), forKey: "featureOverlayLanes") }
+    }
     @Published var showSettings = false
     /// Sessions folded down to one line. Remembered across launches, by session id.
     @Published var collapsedSessions: Set<String> { didSet { defaults.set(collapsedSessions.sorted(), forKey: "collapsedSessions") } }
@@ -122,6 +129,10 @@ final class UsageStore: ObservableObject {
         overlays = defaults.object(forKey: "overlays") == nil
             ? TimelineSeries.defaultOverlays
             : Set((defaults.stringArray(forKey: "overlays") ?? []).compactMap(TimelineSeries.init(rawValue:)))
+        featureOverlayOn = defaults.object(forKey: "featureOverlayOn") as? Bool ?? false
+        featureOverlayLanes = defaults.object(forKey: "featureOverlayLanes") == nil
+            ? Set(FeatureLane.allCases)
+            : Set((defaults.stringArray(forKey: "featureOverlayLanes") ?? []).compactMap(FeatureLane.init(rawValue:)))
         collapsedSessions = Set(defaults.stringArray(forKey: "collapsedSessions") ?? [])
         archivedSessions = Set(defaults.stringArray(forKey: "archivedSessions") ?? [])
         timelineHover.sliceDelay = hoverDelay  // after every stored property is set, so self is usable
