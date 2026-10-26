@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>macOS App Icon Preview</title>
+  <style>
+    body {
+      background-color: #0E1116;
+      /* Dark background to simulate a desktop wallpaper */
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .icon-wrapper {
+      width: 320px;
+      height: 320px;
+      filter: drop-shadow(0px 20px 25px rgba(0, 0, 0, 0.65)) drop-shadow(0px 4px 10px rgba(0, 0, 0, 0.4));
+    }
+
+    .label {
+      color: #8A99AD;
+      margin-top: 24px;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="icon-wrapper">
+    <svg xmlns="http://w3.org" viewBox="0 0 512 512" width="100%" height="100%">
+      <defs>
+        <!-- App Squircle Mask -->
+        <clipPath id="squircle">
+          <path
+            d="M 512,128 C 512,24 488,0 384,0 L 128,0 C 24,0 0,24 0,128 L 0,384 C 0,488 24,512 128,512 L 384,512 C 488,512 512,488 512,384 Z" />
+        </clipPath>
+
+        <!-- Background Gradients -->
+        <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1E222B" />
+          <stop offset="100%" stop-color="#11141A" />
+        </linearGradient>
+
+        <linearGradient id="borderGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.15" />
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.4" />
+        </linearGradient>
+
+        <!-- Chart Bar Gradients (Data/Tokens Tracking) -->
+        <linearGradient id="bar1" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#CC5A37" stop-opacity="0.4" />
+          <stop offset="100%" stop-color="#CC5A37" />
+        </linearGradient>
+        <linearGradient id="bar2" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#D97706" stop-opacity="0.4" />
+          <stop offset="100%" stop-color="#D97706" />
+        </linearGradient>
+        <linearGradient id="bar3" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#EAB308" stop-opacity="0.4" />
+          <stop offset="100%" stop-color="#EAB308" />
+        </linearGradient>
+
+        <!-- Glow Filters for Real-Time/AI Feel -->
+        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="8" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="25" result="blur" />
+        </filter>
+      </defs>
+
+      <!-- Main macOS Squircle Tile -->
+      <g clip-path="url(#squircle)">
+        <rect width="512" height="512" fill="url(#bgGrad)" />
+
+        <!-- Background Grid Matrix (Represents computing/models) -->
+        <g stroke="#ffffff" stroke-width="1" opacity="0.04">
+          <path
+            d="M 0,64 L 512,64 M 0,128 L 512,128 M 0,192 L 512,192 M 0,256 L 512,256 M 0,320 L 512,320 M 0,384 L 512,384 M 0,448 L 512,448" />
+          <path
+            d="M 64,0 L 64,512 M 128,0 L 128,512 M 192,0 L 192,512 M 256,0 L 256,512 M 320,0 L 320,512 M 384,0 L 384,512 M 448,0 L 448,512" />
+        </g>
+
+        <!-- Ambient Backdrop Glow behind the charts -->
+        <circle cx="256" cy="300" r="120" fill="#CC5A37" opacity="0.12" filter="url(#softGlow)" />
+
+        <!-- REAL-TIME TRACKING TIME SERIES CHART -->
+        <g transform="translate(80, 100)">
+          <!-- Trendline (Historical data) -->
+          <path d="M 40,240 L 110,170 L 180,210 L 250,90 L 320,120" fill="none" stroke="#ffffff" stroke-width="4"
+            opacity="0.25" stroke-linecap="round" stroke-linejoin="round" />
+
+          <!-- Bar 1: Historical Baseline -->
+          <rect x="25" y="150" width="30" height="110" rx="6" fill="url(#bar1)" />
+          <!-- Bar 2: Mid-range usage -->
+          <rect x="95" y="110" width="30" height="150" rx="6" fill="url(#bar1)" />
+          <!-- Bar 3: Spiking usage -->
+          <rect x="165" y="160" width="30" height="100" rx="6" fill="url(#bar2)" />
+          <!-- Bar 4: Current Real-time Token burst -->
+          <rect x="235" y="50" width="30" height="210" rx="6" fill="url(#bar3)" filter="url(#glow)" />
+
+          <!-- X-Axis Line -->
+          <line x1="0" y1="260" x2="352" y2="260" stroke="#ffffff" stroke-width="2" opacity="0.15"
+            stroke-linecap="round" />
+        </g>
+
+        <!-- THE AI / MODEL SYMBOLISM (Floating Over the Live Bar) -->
+        <!-- Neural Node Network Anchor -->
+        <g transform="translate(315, 150)" filter="url(#glow)">
+          <!-- Connections -->
+          <line x1="0" y1="0" x2="-40" y2="-40" stroke="#EAB308" stroke-width="3" opacity="0.5" />
+          <line x1="0" y1="0" x2="40" y2="-30" stroke="#EAB308" stroke-width="3" opacity="0.5" />
+
+          <!-- Minor Nodes -->
+          <circle cx="-40" cy="-40" r="6" fill="#D97706" />
+          <circle cx="40" cy="-30" r="8" fill="#EAB308" />
+
+          <!-- Core Spark Node (The Claude Aperture Essence inside an AI Spark) -->
+          <circle cx="0" cy="0" r="16" fill="#EAB308" />
+          <!-- Inner Core -->
+          <circle cx="0" cy="0" r="7" fill="#ffffff" />
+        </g>
+
+        <!-- FLOATING COST METRIC (The Dollar Sign Asset Overlay) -->
+        <g transform="translate(400, 380)">
+          <!-- Glassmorphic Premium Badge Background -->
+          <rect x="-35" y="-35" width="70" height="70" rx="20" fill="#171A21" fill-opacity="0.75" stroke="#ffffff"
+            stroke-width="1.5" stroke-opacity="0.15" />
+          <!-- Clean, non-crypto crisp Dollar Metric -->
+          <text x="0" y="11" font-family="-apple-system, sans-serif" font-size="34" font-weight="600" fill="#ffffff"
+            text-anchor="middle" opacity="0.95">$</text>
+        </g>
+
+        <!-- App Interior Edge Highlight (macOS native bezel effect) -->
+        <path
+          d="M 512,128 C 512,24 488,0 384,0 L 128,0 C 24,0 0,24 0,128 L 0,384 C 0,488 24,512 128,512 L 384,512 C 488,512 512,488 512,384 Z"
+          fill="none" stroke="url(#borderGrad)" stroke-width="4" />
+      </g>
+    </svg>
+  </div>
+
+  <div class="label">macOS Squircle App Icon Concept</div>
+
+</body>
+
+</html>

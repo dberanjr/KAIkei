@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+# Local session memory for the author's Claude Code setup, not part of the project.
+.remember/
+# Stale build output and an app bundle from before the rename (Makefile builds in ~/Library/Caches instead).
+/ClaudeUsageWidget/
+*.app
+# Third-party artwork used while designing the icon; the finished icon is Resources/AppIcon-source.png.
+/AppIcon/*.webp
+# Superseded by Resources/AppIcon-source.png.
+/ClaudeCodeUsageAppIconv3.png
