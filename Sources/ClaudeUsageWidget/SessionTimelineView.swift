@@ -67,7 +67,7 @@ struct SessionTimelineView: View {
     private var density: TimelineDensity {
         guard focus else { return TimelineDensity(store.size) }
         // Everything outside the data panels (title, readout, banner, chips, legend, headers, ribbon) takes about this much.
-        let overhead: CGFloat = 400
+        let overhead: CGFloat = 400 + lanes.totalHeight(density: .full)
         let base = TimelineDensity.full
         let variable = base.mainHeight + separate.reduce(CGFloat(0)) { $0 + (($1 == .cumulative) ? base.cumulativeHeight : base.panelHeight) }
         let factor = availableHeight > 0 ? min(max((availableHeight - overhead) / max(variable, 1), 1), 3) : 1
@@ -83,6 +83,9 @@ struct SessionTimelineView: View {
     /// Series that have their own panel: everything not overlaid on the context chart.
     private var separate: [TimelineSeries] { TimelineSeries.allCases.filter { !store.overlays.contains($0) } }
 
+    /// Loop, sub-agent, test and plugin lanes for this session. Cached in the store, so a redraw does not rebuild them.
+    private var lanes: FeatureLanes { store.featureLanes(sessionID: sessionID, timeline: timeline) }
+
     private func height(of series: TimelineSeries) -> CGFloat { series == .cumulative ? density.cumulativeHeight : density.panelHeight }
 
     /// The vertical layout, described once: the same items build the views and give the pointer its bands.
@@ -93,6 +96,7 @@ struct SessionTimelineView: View {
             .init(kind: .header, height: density.headerHeight), .init(kind: .data, height: density.mainHeight),
         ]
         for series in separate { items += [.init(kind: .header, height: density.headerHeight), .init(kind: .data, height: height(of: series))] }
+        items += lanes.stackItems(density: density)
         return TimelineStackLayout(items: items, spacing: TimelineDensity.spacing)
     }
 
@@ -284,6 +288,7 @@ struct SessionTimelineView: View {
                 panelHeader(title(of: series, g), color: series.color, blurb: density == .compact ? "" : blurb(of: series, g), height: height) { seriesLegend(series, g) }
                 separatePanel(series, g)
             }
+            if !lanes.isEmpty { FeatureLaneStack(lanes: lanes, geometry: g, density: density) }
         }
         .coordinateSpace(name: "timelineStack")
         .background(GeometryReader { box in

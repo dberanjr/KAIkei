@@ -34,3 +34,15 @@ import Testing
         #expect(FeatureLane.allCases.map(\.title) == ["/loop", "/goal", "Sub-agents", "Test runs", "Plugins and skills"])
     }
 }
+
+@Suite struct LaneStackLayoutTests {
+    @Test func laneItemsProduceLaneBandsAndShiftNothingAbove() {
+        let base: [StackItem] = [.init(kind: .ribbon, height: 20), .init(kind: .prompts, height: 14), .init(kind: .data, height: 100)]
+        let plain = TimelineStackLayout(items: base, spacing: 2).bands
+        let lanes: [StackItem] = [.init(kind: .header, height: 28), .init(kind: .lane, height: 60), .init(kind: .header, height: 28), .init(kind: .lane, height: 40)]
+        let with = TimelineStackLayout(items: base + lanes, spacing: 2).bands
+        #expect(Array(with.prefix(3)) == plain)
+        #expect(with.suffix(2).map(\.kind) == [.lane, .lane])
+        #expect(with[3].minY == plain[2].maxY + 2 + 28 + 2 && with[3].maxY == with[3].minY + 60)
+    }
+}

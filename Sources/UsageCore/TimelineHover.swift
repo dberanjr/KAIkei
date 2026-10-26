@@ -3,7 +3,7 @@ import Foundation
 /// A horizontal band of the timeline stack, in points from its top. Hit-testing needs to know which kind of panel the
 /// pointer is over, because the same x means different things in the model ribbon, the prompt lane and a data panel.
 public struct PanelBand: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case ribbon, prompts, data }
+    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, lane }
     public var kind: Kind
     public var minY: Double
     public var maxY: Double
@@ -62,6 +62,8 @@ public enum TimelineHitTester {
         case .data:
             if let line = nearestMarker(where: isStructural) { return line }
             return g.nearestCall(to: x).map { .call($0) }
+        case .lane:
+            return nil  // lane hover is resolved by the lane views, which know what each lane draws
         }
     }
 }
@@ -137,7 +139,7 @@ public struct DwellTracker: Equatable, Sendable {
 
 /// One item in the timeline's vertical stack.
 public struct StackItem: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, header }
+    public enum Kind: Equatable, Sendable { case ribbon, prompts, data, header, lane }
     public var kind: Kind
     public var height: Double
     public init(kind: Kind, height: Double) { self.kind = kind; self.height = height }
@@ -158,6 +160,7 @@ public struct TimelineStackLayout: Equatable, Sendable {
             case .ribbon: out.append(PanelBand(kind: .ribbon, minY: y, maxY: y + item.height))
             case .prompts: out.append(PanelBand(kind: .prompts, minY: y, maxY: y + item.height))
             case .data: out.append(PanelBand(kind: .data, minY: y, maxY: y + item.height))
+            case .lane: out.append(PanelBand(kind: .lane, minY: y, maxY: y + item.height))
             case .header: break
             }
             y += item.height + spacing

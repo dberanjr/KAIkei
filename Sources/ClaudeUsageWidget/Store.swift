@@ -138,6 +138,18 @@ final class UsageStore: ObservableObject {
         timelineHover.sliceDelay = hoverDelay  // after every stored property is set, so self is usable
     }
 
+    private var laneCache: [String: (key: [Int], lanes: FeatureLanes)] = [:]
+
+    /// The feature lanes for a session, rebuilt only when its calls or the transcript signals change.
+    func featureLanes(sessionID: String, timeline: SessionTimeline) -> FeatureLanes {
+        let signals = dashboard?.signals ?? []
+        let key = [timeline.calls.count, signals.count, Int(timeline.end.timeIntervalSince1970)]
+        if let hit = laneCache[sessionID], hit.key == key { return hit.lanes }
+        let lanes = FeatureLanes.build(signals: signals, timeline: timeline, sessionID: sessionID)
+        laneCache[sessionID] = (key, lanes)
+        return lanes
+    }
+
     func toggleCollapsed(_ id: String) {
         if collapsedSessions.contains(id) { collapsedSessions.remove(id) } else { collapsedSessions.insert(id) }
     }
