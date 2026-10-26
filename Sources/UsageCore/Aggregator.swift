@@ -1,7 +1,7 @@
 import Foundation
 
 public enum TimeRange: String, CaseIterable, Identifiable, Sendable {
-    case today = "Today", week = "7 days", month = "30 days", all = "All time"
+    case today = "Today", yesterday = "Yesterday", week = "7 days", month = "30 days", all = "All time"
     public var id: String { rawValue }
 }
 
@@ -54,14 +54,20 @@ public enum Aggregator {
     public static func start(of range: TimeRange, now: Date, calendar: Calendar) -> Date {
         switch range {
         case .today: return calendar.startOfDay(for: now)
+        case .yesterday: return calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)) ?? now.addingTimeInterval(-86_400)
         case .week: return now.addingTimeInterval(-7 * 86_400)
         case .month: return now.addingTimeInterval(-30 * 86_400)
         case .all: return .distantPast
         }
     }
 
+    /// Exclusive upper bound. Yesterday stops at midnight; every other range runs up to now (plus a day of clock-skew slack).
+    public static func end(of range: TimeRange, now: Date, calendar: Calendar) -> Date {
+        range == .yesterday ? calendar.startOfDay(for: now) : now.addingTimeInterval(86_400)
+    }
+
     public static func snapshot(records: [UsageRecord], range: TimeRange, now: Date, calendar: Calendar, billing: CacheWriteBilling = .listPrice) -> Snapshot {
-        let from = start(of: range, now: now, calendar: calendar)
+        let from = start(of: range, now: now, calendar: calendar), to = end(of: range, now: now, calendar: calendar)
         var snap = Snapshot()
         var model: [String: BreakdownRow] = [:], skill = model, plugin = model, tool = model, project = model
         var daily: [String: DailyPoint] = [:]
@@ -72,7 +78,7 @@ public enum Aggregator {
             dict[key] = row
         }
 
-        for r in records where r.timestamp >= from && r.timestamp <= now.addingTimeInterval(86_400) {
+        for r in records where r.timestamp >= from && r.timestamp < to {
             let cost = r.cost(billing)
             snap.totalCost += cost; snap.totalUsage += r.usage; snap.messageCount += 1
             snap.costParts = snap.costParts + Pricing.costParts(of: r.usage, model: r.model, billing: billing)

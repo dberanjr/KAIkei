@@ -841,7 +841,7 @@ struct TimelineHoverOverlay: View {
     }
 
     private func size(of target: HoverTarget, in container: CGSize) -> CGSize {
-        let height: CGFloat = { if case .call = target { 400 } else if case .modelSpan = target { 120 } else { 130 } }()
+        let height: CGFloat = { if case .call = target { 470 } else if case .modelSpan = target { 120 } else { 130 } }()
         return CGSize(width: cardWidth(for: target, in: container), height: height)
     }
 

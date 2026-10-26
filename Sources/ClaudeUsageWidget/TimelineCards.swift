@@ -73,9 +73,7 @@ struct CallCard: View {
                     Text(ModelFamily.displayName(modelID: call.model) + (call.effort.map { " · \($0)" } ?? "")).font(.callout)
                     if call.isSidechain { Text("sub-agent").font(.caption).foregroundStyle(.secondary) }
                 }
-                if let preview = promptPreview(turn: call.turn, in: timeline) {
-                    Text("Prompt \(call.turn): “\(preview)”").font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                }
+                if let preview = promptPreview(turn: call.turn, in: timeline) { promptSection(preview) }
                 Divider()
                 contextSection(window: window, total: context)
                 Divider()
@@ -85,6 +83,18 @@ struct CallCard: View {
                 if !call.tools.isEmpty || call.skill != nil { toolsSection }
                 if !slice.isEmpty { eventsSection(slice) }
             }
+        }
+    }
+
+    /// The prompt this call was answering, quoted at more length than the one-line chart tooltips allow, with what the
+    /// prompt has cost up to and including this call.
+    private func promptSection(_ preview: String) -> some View {
+        let sofar = timeline.calls[...index].filter { $0.turn == call.turn }
+        return VStack(alignment: .leading, spacing: 3) {
+            Text("Prompt \(call.turn)").font(.caption.weight(.semibold))
+            Text("“\(preview)”").font(.caption).foregroundStyle(.secondary).lineLimit(6).fixedSize(horizontal: false, vertical: true)
+            Text("\(Fmt.count(sofar.count, "call")) so far · \(Fmt.money(sofar.reduce(0) { $0 + $1.cost }))")
+                .font(.caption).foregroundStyle(.tertiary).monospacedDigit()
         }
     }
 
@@ -123,7 +133,8 @@ struct CallCard: View {
         let p = call.costParts
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Cost").font(.caption.weight(.semibold))
+                RoundedRectangle(cornerRadius: 2).fill(Theme.seriesCostPerCall).frame(width: 8, height: 8)
+                Text("Cost of this call").font(.caption.weight(.semibold))
                 Text(Fmt.money(call.cost)).font(.callout.weight(.semibold)).monospacedDigit()
                 Spacer()
             }
@@ -132,8 +143,8 @@ struct CallCard: View {
             Row(label: "Output", value: Fmt.money(p.output), swatch: Theme.ramp[2])
             Row(label: "Input", value: Fmt.money(p.input), swatch: Theme.ramp[3])
             let total = timeline.totalCost
-            Row(label: "Session so far", value: Fmt.money(call.cumulativeCost),
-                detail: total > 0 ? Fmt.percent(call.cumulativeCost / total * 100) : nil)
+            Row(label: "Cost so far", value: Fmt.money(call.cumulativeCost),
+                detail: total > 0 ? Fmt.percent(call.cumulativeCost / total * 100) : nil, swatch: Theme.seriesCumulative)
         }
     }
 

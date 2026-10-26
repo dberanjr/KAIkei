@@ -24,7 +24,7 @@ struct HeaderBar: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 Picker("Range", selection: $store.range) { ForEach(TimeRange.allCases) { Text($0.rawValue).tag($0) } }
-                    .pickerStyle(.segmented).labelsHidden().frame(width: 260)
+                    .pickerStyle(.segmented).labelsHidden().frame(width: 310)
                 Spacer(minLength: 4)
                 Picker("Size", selection: $store.size) { ForEach(WidgetSize.allCases) { Text($0.rawValue).tag($0) } }
                     .pickerStyle(.segmented).labelsHidden().frame(width: 120).help("Widget size")

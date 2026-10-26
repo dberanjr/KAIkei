@@ -54,6 +54,12 @@ func rec(
         #expect(s.messageCount == 1) // "now" is 12:00 UTC, so 20h ago is yesterday
     }
 
+    @Test func rangeYesterdayIsThePreviousCalendarDayOnly() {
+        // "now" is 12:00 UTC: 1h ago is today, 20h ago is yesterday, 40h ago is the day before.
+        let s = snap([rec("a", at: Self.hoursAgo(1), output: 1_000), rec("b", at: Self.hoursAgo(20), output: 1_000), rec("c", at: Self.hoursAgo(40), output: 1_000)], .yesterday)
+        #expect(s.messageCount == 1)
+    }
+
     @Test func rangeWeekIsRollingSevenDays() {
         let s = snap([rec("a", at: Self.hoursAgo(24 * 6), output: 1), rec("b", at: Self.hoursAgo(24 * 8), output: 1)], .week)
         #expect(s.messageCount == 1)

@@ -14,7 +14,7 @@ struct TotalsBand: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(Fmt.money(s.totalCost))
                         .font(.system(size: big ? 40 : 30, weight: .semibold)).monospacedDigit()
-                    Text(store.range == .all ? "all time" : store.range == .today ? "today" : "last \(store.range.rawValue)")
+                    Text(store.range == .all ? "all time" : store.range == .today ? "today" : store.range == .yesterday ? "yesterday" : "last \(store.range.rawValue)")
                         .foregroundStyle(.secondary)
                 }
                 HStack(spacing: 14) {
