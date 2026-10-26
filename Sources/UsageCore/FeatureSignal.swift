@@ -18,8 +18,11 @@ public struct FeatureSignal: Identifiable, Equatable, Sendable {
         case agentSpawned(toolUseID: String, type: String?, description: String)
         /// A Bash call whose command runs a known test runner.
         case testCommand(toolUseID: String, command: String)
-        /// A tool result whose text contains something that looks like a runner summary.
-        case testOutput(toolUseID: String, text: String)
+        /// A tool result that holds a readable test-runner summary. Parsed when the row is read, so the output text itself is
+        /// never kept, and output with no readable summary never becomes a signal.
+        case testOutput(toolUseID: String, summary: TestSummary)
+        /// The result of an `Agent` call, which names the agent run it started. The sub-agent's own rows carry that same id.
+        case agentLaunched(toolUseID: String, agentID: String)
     }
 
     /// The row's uuid, or `<toolUseID>#<tag>` for tool rows. Claude Code can write the same tool call into several rows
@@ -45,7 +48,8 @@ extension TranscriptParser {
         "npm run test", "npm t ", "yarn test", "pnpm test", "make test", "xcodebuild test",
     ]
     private static let loopPromptLimit = 100
-    private static let outputKeep = 20_000
+    private static let agentIDMarker = Data(#""agentId""#.utf8)
+    private static let sidechainMarker = Data(#""isSidechain":true"#.utf8)
 
     /// Returns a signal for the rows the feature lanes read; nil for everything else. Like `parse(line:)` it filters on
     /// raw bytes first, because most rows are large blobs that are not worth decoding.
@@ -56,7 +60,9 @@ extension TranscriptParser {
         let isAck = has(scheduledForMarker)
         let isToolUse = toolUseNameMarkers.contains(where: has)
         let isOutput = has(toolResultMarker) && summaryMarkers.contains(where: has)
-        guard isFire || isLoopCommand || isAck || isToolUse || isOutput,
+        // An Agent call's result names the run it started. Sub-agent rows all carry an agentId, so skip those.
+        let isLaunch = has(agentIDMarker) && has(toolResultMarker) && !has(sidechainMarker)
+        guard isFire || isLoopCommand || isAck || isToolUse || isOutput || isLaunch,
             let root = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any],
             let sessionID = root["sessionId"] as? String,
             let ts = (root["timestamp"] as? String).flatMap({ isoFractional.date(from: $0) ?? isoPlain.date(from: $0) })
@@ -103,14 +109,16 @@ extension TranscriptParser {
                 let toolID = toolResultID(content) {
                 return signal(.wakeupAck(toolUseID: toolID, scheduledFor: Date(timeIntervalSince1970: ms / 1000)), id: "\(toolID)#ack")
             }
+            if let result = root["toolUseResult"] as? [String: Any], let agent = result["agentId"] as? String, let toolID = toolResultID(content) {
+                return signal(.agentLaunched(toolUseID: toolID, agentID: agent), id: "\(toolID)#launch")
+            }
             if let text = content as? String, let args = loopCommandArguments(in: text) {
                 return signal(.loopInvoked(prompt: shortened(args)), id: uuid)
             }
             if let blocks = content as? [[String: Any]],
                 let block = blocks.first(where: { $0["type"] as? String == "tool_result" }), let toolID = block["tool_use_id"] as? String {
-                let text = resultText(block["content"])
-                guard summaryMarkers.contains(where: { text.contains(String(decoding: $0, as: UTF8.self)) }) else { return nil }
-                return signal(.testOutput(toolUseID: toolID, text: String(text.suffix(outputKeep))), id: "\(toolID)#out")
+                guard let summary = TestSummaryParser.parse(resultText(block["content"])) else { return nil }
+                return signal(.testOutput(toolUseID: toolID, summary: summary), id: "\(toolID)#out")
             }
             return nil
         default:

@@ -25,14 +25,20 @@ public struct SubagentLane: Equatable, Sendable {
 extension FeatureLanes {
     public static func subagents(signals: [FeatureSignal], timeline: SessionTimeline) -> SubagentLane? {
         var spawns: [String: (type: String?, description: String)] = [:]
+        var spawnOfAgent: [String: String] = [:]
         for s in signals {
-            if case .agentSpawned(let id, let type, let description) = s.kind { spawns[id] = (type, description) }
+            switch s.kind {
+            case .agentSpawned(let id, let type, let description): spawns[id] = (type, description)
+            case .agentLaunched(let toolID, let agentID): spawnOfAgent[agentID] = toolID
+            default: break
+            }
         }
         let grouped = Dictionary(grouping: timeline.calls.filter { $0.isSidechain && $0.agentID != nil }) { $0.agentID! }
         guard !grouped.isEmpty else { return nil }
 
         var runs: [SubagentRun] = grouped.map { agent, calls in
-            let spawn = calls.compactMap(\.spawnToolUseID).first.flatMap { spawns[$0] }
+            // The launch result is the reliable link. A fork's own rows also carry its spawn id, which is the fallback.
+            let spawn = (spawnOfAgent[agent] ?? calls.compactMap(\.spawnToolUseID).first).flatMap { spawns[$0] }
             return SubagentRun(
                 id: agent, label: spawn.map { $0.description.isEmpty ? "sub-agent" : $0.description } ?? "sub-agent", type: spawn?.type,
                 start: calls.map(\.time).min()!, end: calls.map(\.time).max()!, cost: calls.reduce(0) { $0 + $1.cost },

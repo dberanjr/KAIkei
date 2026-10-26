@@ -143,7 +143,7 @@ final class UsageStore: ObservableObject {
     /// The feature lanes for a session, rebuilt only when its calls or the transcript signals change.
     func featureLanes(sessionID: String, timeline: SessionTimeline) -> FeatureLanes {
         let signals = dashboard?.signals ?? []
-        let key = [timeline.calls.count, signals.count, Int(timeline.end.timeIntervalSince1970)]
+        let key = FeatureLanes.cacheKey(timeline: timeline, signalCount: signals.count)
         if let hit = laneCache[sessionID], hit.key == key { return hit.lanes }
         let lanes = FeatureLanes.build(signals: signals, timeline: timeline, sessionID: sessionID)
         laneCache[sessionID] = (key, lanes)

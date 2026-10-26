@@ -30,6 +30,15 @@ import Testing
         #expect(lanes.loop == nil && lanes.isEmpty)
     }
 
+    @Test func theCacheKeyChangesWhenTheSameCallsAreCostedDifferently() {
+        let records = [tcall("a", minute: 1, write1h: 10_000, output: 500)]
+        let list = Timelines.build(records: records, events: [], sessionID: "s1", billing: .listPrice)
+        let other = Timelines.build(records: records, events: [], sessionID: "s1", billing: CacheWriteBilling.allCases.first { $0 != .listPrice } ?? .listPrice)
+        #expect(FeatureLanes.cacheKey(timeline: list, signalCount: 0) != FeatureLanes.cacheKey(timeline: other, signalCount: 0))
+        #expect(FeatureLanes.cacheKey(timeline: list, signalCount: 0) == FeatureLanes.cacheKey(timeline: list, signalCount: 0))
+        #expect(FeatureLanes.cacheKey(timeline: list, signalCount: 0) != FeatureLanes.cacheKey(timeline: list, signalCount: 1))
+    }
+
     @Test func everyLaneHasATitle() {
         #expect(FeatureLane.allCases.map(\.title) == ["/loop", "/goal", "Sub-agents", "Test runs", "Plugins and skills"])
     }
@@ -87,7 +96,7 @@ import Testing
 
     @Test func hoveringATestRunFindsTheNearestRunWithinTolerance() {
         let signals = [tsignal("t1#test", minute: 1, .testCommand(toolUseID: "t1", command: "swift test")),
-                       tsignal("t1#out", minute: 2, .testOutput(toolUseID: "t1", text: "✔ Test run with 3 tests in 1 suites passed after 0.1 seconds."))]
+                       tsignal("t1#out", minute: 2, .testOutput(toolUseID: "t1", summary: TestSummary(runner: "swift test", passed: 3, failed: 0, skipped: 0)))]
         let timeline = Timelines.build(records: [tcall("a", minute: 0), tcall("b", minute: 10)], events: [], sessionID: "s1")
         let lanes = FeatureLanes.build(signals: signals, timeline: timeline, sessionID: "s1")
         let g = TimelineGeometry(timeline: timeline, byCalls: false)

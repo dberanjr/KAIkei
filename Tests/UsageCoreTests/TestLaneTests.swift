@@ -57,6 +57,24 @@ import Testing
         #expect(bad.passed == 4 && bad.failed == 1 && bad.skipped == 2)
     }
 
+    @Test func aFailedSwiftTestingRunIsNeverGreenEvenWithoutItsFailedTestLines() throws {
+        // A long run can push the per-test lines out of the captured output; the summary line alone must still say it failed.
+        let s = try #require(parse("✘ Test run with 300 tests in 3 suites failed after 1.2 seconds with 2 issues."))
+        #expect(s.failed >= 1 && s.passed + s.failed == 300)
+    }
+
+    @Test func xctestReadsTheSuiteLineThenTheExecutedLineBelowIt() throws {
+        let out = "Test Suite 'All tests' failed at 2026-10-25 12:00:00.000.\n\t Executed 12 tests, with 2 failures (0 unexpected) in 0.3 (0.3) seconds"
+        let s = try #require(parse(out))
+        #expect(s.passed == 10 && s.failed == 2)
+    }
+
+    @Test func anInterruptedXCTestRunIsNotASmallGreenRun() {
+        // A crash mid-run leaves only per-suite subtotals; they are not the run's result.
+        let out = "Test Suite 'FirstTests' passed at 2026-10-25 12:00:00.000.\n\t Executed 5 tests, with 0 failures (0 unexpected) in 0.1 (0.1) seconds"
+        #expect(parse(out) == nil)
+    }
+
     @Test func noRecognisableSummaryIsNil() {
         #expect(parse("error: build failed") == nil)
         #expect(parse("3 files passed review") == nil)
@@ -68,7 +86,10 @@ import Testing
 
     func run(_ id: String, command minute: Double, output: String?, outputMinute: Double? = nil) -> [FeatureSignal] {
         var out = [tsignal("\(id)#test", minute: minute, .testCommand(toolUseID: id, command: "swift test"))]
-        if let output { out.append(tsignal("\(id)#out", minute: outputMinute ?? minute + 1, .testOutput(toolUseID: id, text: output))) }
+        // Output with no readable summary never becomes a signal (see parseSignal), so a run without one is unreadable.
+        if let output, let summary = TestSummaryParser.parse(output) {
+            out.append(tsignal("\(id)#out", minute: outputMinute ?? minute + 1, .testOutput(toolUseID: id, summary: summary)))
+        }
         return out
     }
     let green = "✔ Test run with 10 tests in 2 suites passed after 0.1 seconds."
@@ -103,11 +124,11 @@ import Testing
 
     @Test func anEmptyRunIsNotGreen() throws {
         let l = try #require(lane(run("t1", command: 1, output: "Test Suite 'All tests' passed. Executed 0 tests, with 0 failures (0 unexpected) in 0 (0) seconds")))
-        #expect(l.lastState == .unreadable)
+        #expect(l.lastState == .unreadable && l.runs[0].summary == nil)  // a run of zero tests is not a result
     }
 
     @Test func noTestCommandsMeansNoLane() {
         #expect(lane([]) == nil)
-        #expect(lane([tsignal("t1#out", minute: 1, .testOutput(toolUseID: "t1", text: "x passed"))]) == nil)
+        #expect(lane([tsignal("t1#out", minute: 1, .testOutput(toolUseID: "t1", summary: TestSummary(runner: "swift test", passed: 1, failed: 0, skipped: 0)))]) == nil)
     }
 }

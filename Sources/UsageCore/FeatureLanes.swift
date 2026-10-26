@@ -40,6 +40,12 @@ public struct FeatureLanes: Equatable, Sendable {
     }
     public var isEmpty: Bool { present.isEmpty }
 
+    /// What a cached `FeatureLanes` was built from. Includes the total cost so that costing the same calls differently (the
+    /// billing setting) or a response whose usage grew after it was first written does not leave stale numbers on screen.
+    public static func cacheKey(timeline: SessionTimeline, signalCount: Int) -> [Int] {
+        [timeline.calls.count, signalCount, Int(timeline.end.timeIntervalSince1970), Int((timeline.totalCost * 1_000_000).rounded())]
+    }
+
     public static func build(signals: [FeatureSignal], timeline: SessionTimeline, sessionID: String) -> FeatureLanes {
         let mine = signals.filter { $0.sessionID == sessionID }
         return FeatureLanes(

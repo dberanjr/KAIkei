@@ -126,10 +126,20 @@ func outputLine(toolID: String = "t5", text: String) -> String {
         }
     }
 
-    @Test func aToolResultOnlyBecomesTestOutputWhenItHasASummaryMarker() throws {
+    @Test func aToolResultBecomesTestOutputOnlyWhenItHoldsAReadableSummary() throws {
         let yes = try #require(signal(outputLine(text: "Test run with 3 tests in 1 suites passed after 0.1 seconds.")))
-        #expect(yes.kind == .testOutput(toolUseID: "t5", text: "Test run with 3 tests in 1 suites passed after 0.1 seconds."))
+        #expect(yes.kind == .testOutput(toolUseID: "t5", summary: TestSummary(runner: "swift test", passed: 3, failed: 0, skipped: 0)))
         #expect(signal(outputLine(text: "file contents here")) == nil)
+        // Matches a marker ("passed") but is not a runner summary, e.g. a source file that was read.
+        #expect(signal(outputLine(text: "3 files passed review")) == nil)
+    }
+
+    @Test func aLaunchResultLinksTheAgentToItsSpawn() throws {
+        let line = envelope(
+            "user",
+            #""message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_x","content":"Async agent launched"}]},"toolUseResult":{"isAsync":true,"status":"async_launched","agentId":"ag1","description":"Explore data"}"#,
+            uuid: "res1", session: "s1", ts: "2026-10-25T14:25:00.000Z")
+        #expect(try #require(signal(line)).kind == .agentLaunched(toolUseID: "toolu_x", agentID: "ag1"))
     }
 
     @Test func unrelatedRowsReturnNil() {

@@ -41,10 +41,6 @@ extension FeatureLanes {
         present.flatMap { [StackItem(kind: .header, height: density.headerHeight), StackItem(kind: .lane, height: laneHeight($0, density: density), lane: $0)] }
     }
 
-    func totalHeight(density: TimelineDensity) -> CGFloat {
-        present.reduce(0) { $0 + density.headerHeight + laneHeight($1, density: density) + TimelineDensity.spacing * 2 }
-    }
-
     /// The one-line summary on the right of a lane's header.
     func summary(_ lane: FeatureLane) -> String {
         switch lane {

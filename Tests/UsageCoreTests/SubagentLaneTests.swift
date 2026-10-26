@@ -31,6 +31,13 @@ func agentCall(_ id: String, minute: Double, agent: String?, spawn: String? = ni
         #expect(run.label == "Explore data" && run.type == "fork")
     }
 
+    @Test func labelComesFromTheLaunchResultWhenTheRowsCarryNoSpawnID() throws {
+        let signals = [tsignal("toolu_x#agent", minute: 0.5, .agentSpawned(toolUseID: "toolu_x", type: "general-purpose", description: "Builder check")),
+                       tsignal("toolu_x#launch", minute: 0.6, .agentLaunched(toolUseID: "toolu_x", agentID: "ag1"))]
+        let run = try #require(lane([agentCall("a", minute: 1, agent: "ag1", spawn: "toolu_inner")], signals).0).runs[0]
+        #expect(run.label == "Builder check" && run.type == "general-purpose")
+    }
+
     @Test func overlappingRunsStackInSeparateRows() throws {
         let l = try #require(lane([
             agentCall("a1", minute: 1, agent: "ag1"), agentCall("a2", minute: 4, agent: "ag1"),

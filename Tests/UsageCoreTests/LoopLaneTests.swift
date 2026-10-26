@@ -78,6 +78,13 @@ func tsignal(_ id: String, minute: Double, _ kind: FeatureSignal.Kind, session: 
         #expect(l.decisions.map(\.kind) == [.stop])
     }
 
+    @Test func aLoopWithNoSelfPacedDecisionsNeverShowsFallbackWakes() throws {
+        // A fixed-interval loop wakes on its cron schedule and never calls ScheduleWakeup; those wake-ups are not fallbacks.
+        let s = signals(withSchedule: false, withStop: false)
+        let l = try #require(lane(s).0)
+        #expect(l.iterations.count == 2 && l.iterations[1].startedBy == .scheduledWake)
+    }
+
     @Test func anOpenLoopRunsToTheEndOfTheTimeline() throws {
         let (maybe, t) = lane(signals(withStop: false))
         let l = try #require(maybe)

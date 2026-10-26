@@ -67,9 +67,11 @@ struct SessionTimelineView: View {
     private var density: TimelineDensity {
         guard focus else { return TimelineDensity(store.size) }
         // Everything outside the data panels (title, readout, banner, chips, legend, headers, ribbon) takes about this much.
-        let overhead: CGFloat = 400 + lanes.totalHeight(density: .full)
         let base = TimelineDensity.full
+        // Lane charts stretch with the panels; each lane's header and the gaps around it do not.
+        let overhead: CGFloat = 400 + CGFloat(lanes.present.count) * (base.headerHeight + 2 * TimelineDensity.spacing)
         let variable = base.mainHeight + separate.reduce(CGFloat(0)) { $0 + (($1 == .cumulative) ? base.cumulativeHeight : base.panelHeight) }
+            + lanes.present.reduce(CGFloat(0)) { $0 + lanes.laneHeight($1, density: base) }
         let factor = availableHeight > 0 ? min(max((availableHeight - overhead) / max(variable, 1), 1), 3) : 1
         return base.scaled(factor)
     }

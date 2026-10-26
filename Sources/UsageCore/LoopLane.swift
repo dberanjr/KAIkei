@@ -54,6 +54,9 @@ extension FeatureLanes {
 
     public static func loop(signals: [FeatureSignal], timeline: SessionTimeline, sessionID: String) -> LoopLane? {
         let mine = signals.filter { $0.sessionID == sessionID && !$0.isSidechain }.sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
+        // Only a self-paced loop (one that calls ScheduleWakeup) can have a fallback wake-up. A fixed-interval loop wakes on its
+        // cron schedule with no decisions at all, and none of those wake-ups are fallbacks.
+        let selfPaced = mine.contains { if case .wakeupScheduled = $0.kind { true } else if case .loopStopped = $0.kind { true } else { false } }
         let wakeTimes = mine.compactMap { s -> Date? in if case .loopWakeup = s.kind { s.timestamp } else { nil } }
 
         struct Boundary { var time: Date; var isWake: Bool; var prompt: String }
@@ -97,7 +100,7 @@ extension FeatureLanes {
             var planned: Date?
             if b.isWake {
                 let previousAgain = decisions.contains { $0.afterIteration == i && { if case .again = $0.kind { true } else { false } }($0) }
-                startedBy = (i == 0 || previousAgain) ? .scheduledWake : .fallbackWake
+                startedBy = (i == 0 || previousAgain || !selfPaced) ? .scheduledWake : .fallbackWake
                 let since = i > 0 ? boundaries[i - 1].time : Date.distantPast
                 planned = acks.filter { $0.time > since && $0.time <= b.time }.max { $0.time < $1.time }?.due
             }
