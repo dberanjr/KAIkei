@@ -274,3 +274,87 @@ struct ModelSpanCard: View {
         }
     }
 }
+
+/// Hover card for something in a feature lane: a loop iteration or decision, a sub-agent run, or a test run.
+struct LaneCard: View {
+    let target: LaneTarget
+    let lanes: FeatureLanes
+    var width: CGFloat = 290
+
+    var body: some View {
+        CardChrome(width: width) {
+            VStack(alignment: .leading, spacing: 6) { content }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch target {
+        case .iteration(let n):
+            if let loop = lanes.loop, let it = loop.iterations.first(where: { $0.index == n }) { iteration(it, of: loop.iterations.count) }
+        case .decision(let id):
+            if let d = lanes.loop?.decisions.first(where: { $0.id == id }) { decision(d) }
+        case .subagent(let id):
+            if let run = lanes.subagents?.runs.first(where: { $0.id == id }) { subagent(run) }
+        case .testRun(let id):
+            if let run = lanes.tests?.runs.first(where: { $0.id == id }) { testRun(run) }
+        }
+    }
+
+    private func title(_ text: String, _ lane: FeatureLane, trailing: String? = nil) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: lane.symbol).foregroundStyle(lane.color)
+            Text(text).font(.callout.weight(.semibold))
+            Spacer()
+            if let trailing { Text(trailing).font(.caption).foregroundStyle(.tertiary).lineLimit(1) }
+        }
+    }
+
+    private func line(_ text: String) -> some View { Text(text).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+
+    @ViewBuilder private func iteration(_ it: LoopIteration, of count: Int) -> some View {
+        title("Loop iteration \(it.index) of \(count)", .loop)
+        line("\(clock(it.start)) to \(clock(it.end)) · \(Fmt.spanLength(it.end.timeIntervalSince(it.start)))")
+        Divider()
+        line("\(Fmt.count(it.callCount, "call")) · \(Fmt.money(it.cost)) · \(Fmt.tokens(it.outputTokens)) tokens written")
+        switch it.startedBy {
+        case .invoked: line("Started when the loop was set up")
+        case .scheduledWake:
+            if let late = it.lateness, let due = it.plannedFor { line("Due \(clock(due)), woke \(Fmt.spanLength(max(late, 0))) later") }
+            else { line("Woke on the schedule Claude set") }
+        case .fallbackWake: line("Woke on the harness's fallback timer: the previous iteration neither rescheduled nor stopped")
+        }
+        if !it.prompt.isEmpty { line("“\(it.prompt)”") }
+    }
+
+    @ViewBuilder private func decision(_ d: LoopDecision) -> some View {
+        switch d.kind {
+        case .again(let seconds, let reason):
+            title("Claude chose to loop again", .loop, trailing: clock(d.time))
+            line("Wake in \(Fmt.spanLength(TimeInterval(seconds))) (after iteration \(d.afterIteration))")
+            if let reason, !reason.isEmpty { line(reason) }
+        case .stop:
+            title("Claude stopped the loop", .loop, trailing: clock(d.time))
+            line("After iteration \(d.afterIteration)")
+        }
+    }
+
+    @ViewBuilder private func subagent(_ run: SubagentRun) -> some View {
+        title(run.label, .subagents, trailing: run.type)
+        line("\(clock(run.start)) to \(clock(run.end)) · \(Fmt.spanLength(run.end.timeIntervalSince(run.start)))")
+        Divider()
+        line("\(Fmt.count(run.callCount, "call")) · \(Fmt.money(run.cost)) · \(Fmt.tokens(run.outputTokens)) tokens written")
+    }
+
+    @ViewBuilder private func testRun(_ run: TestRun) -> some View {
+        title("Test run", .tests, trailing: clock(run.time))
+        line(run.command)
+        Divider()
+        if let s = run.summary {
+            let pct = s.total > 0 ? Double(s.passed) / Double(s.total) * 100 : 0
+            line("\(s.passed) of \(s.total) passed (\(Fmt.percent(pct)))" + (s.failed > 0 ? " · \(s.failed) failed" : "") + (s.skipped > 0 ? " · \(s.skipped) skipped" : ""))
+            line("Read from \(s.runner) output")
+        } else {
+            line("The result could not be read from the output")
+        }
+    }
+}

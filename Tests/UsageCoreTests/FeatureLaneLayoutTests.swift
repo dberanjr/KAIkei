@@ -46,3 +46,61 @@ import Testing
         #expect(with[3].minY == plain[2].maxY + 2 + 28 + 2 && with[3].maxY == with[3].minY + 60)
     }
 }
+
+@Suite struct LaneHitTests {
+    static let t0 = TimelineTests.t0
+    func minute(_ m: Double) -> Date { Self.t0.addingTimeInterval(m * 60) }
+
+    func loopWorld() -> (FeatureLanes, TimelineGeometry) {
+        let s = LoopLaneTests()
+        let timeline = Timelines.build(records: s.records(), events: [], sessionID: "s1")
+        let lanes = FeatureLanes.build(signals: s.signals(), timeline: timeline, sessionID: "s1")
+        return (lanes, TimelineGeometry(timeline: timeline, byCalls: false))
+    }
+
+    @Test func hoveringInsideAnIterationFindsIt() {
+        let (lanes, g) = loopWorld()
+        #expect(lanes.target(lane: .loop, atX: g.x(time: minute(25)), row: nil, tolerance: 1, geometry: g) == .iteration(2))
+        #expect(lanes.target(lane: .loop, atX: g.x(time: minute(2)), row: nil, tolerance: 1, geometry: g) == .iteration(1))
+    }
+
+    @Test func hoveringADecisionTimeFindsTheDecisionBeforeTheIteration() {
+        let (lanes, g) = loopWorld()
+        #expect(lanes.target(lane: .loop, atX: g.x(time: minute(3)) + 2, row: nil, tolerance: 5, geometry: g) == .decision("t1#sched"))
+    }
+
+    @Test func hoveringAnEmptyStretchFindsNothing() {
+        let (lanes, g) = loopWorld()
+        #expect(lanes.target(lane: .loop, atX: g.x(time: minute(15)), row: nil, tolerance: 1, geometry: g) == nil)
+    }
+
+    @Test func hoveringAnOverlappingSubagentRowFindsTheRunInThatRow() {
+        let records = [agentCall("a1", minute: 1, agent: "ag1"), agentCall("a2", minute: 6, agent: "ag1"),
+                       agentCall("b1", minute: 2, agent: "ag2"), agentCall("b2", minute: 5, agent: "ag2")]
+        let timeline = Timelines.build(records: records, events: [], sessionID: "s1")
+        let lanes = FeatureLanes.build(signals: [], timeline: timeline, sessionID: "s1")
+        let g = TimelineGeometry(timeline: timeline, byCalls: false)
+        let x = g.x(time: minute(3))
+        #expect(lanes.target(lane: .subagents, atX: x, row: 0, tolerance: 1, geometry: g) == .subagent("ag1"))
+        #expect(lanes.target(lane: .subagents, atX: x, row: 1, tolerance: 1, geometry: g) == .subagent("ag2"))
+    }
+
+    @Test func hoveringATestRunFindsTheNearestRunWithinTolerance() {
+        let signals = [tsignal("t1#test", minute: 1, .testCommand(toolUseID: "t1", command: "swift test")),
+                       tsignal("t1#out", minute: 2, .testOutput(toolUseID: "t1", text: "✔ Test run with 3 tests in 1 suites passed after 0.1 seconds."))]
+        let timeline = Timelines.build(records: [tcall("a", minute: 0), tcall("b", minute: 10)], events: [], sessionID: "s1")
+        let lanes = FeatureLanes.build(signals: signals, timeline: timeline, sessionID: "s1")
+        let g = TimelineGeometry(timeline: timeline, byCalls: false)
+        #expect(lanes.target(lane: .tests, atX: g.x(time: minute(2)) + 3, row: nil, tolerance: 5, geometry: g) == .testRun("t1"))
+        #expect(lanes.target(lane: .tests, atX: g.x(time: minute(2)) + 300, row: nil, tolerance: 5, geometry: g) == nil)
+    }
+
+    @Test func theHitTesterResolvesALaneBandToItsLane() {
+        let (lanes, g) = loopWorld()
+        let bands = [PanelBand(kind: .lane, minY: 100, maxY: 160, lane: .loop)]
+        let width = 400.0
+        let px = TimelineHitTester.pixel(forX: g.x(time: minute(25)), width: width, geometry: g)
+        let hit = TimelineHitTester.target(atX: px, y: 130, width: width, bands: bands, geometry: g, lanes: lanes)
+        #expect(hit == .lane(.iteration(2)))
+    }
+}

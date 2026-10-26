@@ -38,7 +38,7 @@ extension FeatureLanes {
 
     /// Stack items for every present lane: a header, then the lane.
     func stackItems(density: TimelineDensity) -> [StackItem] {
-        present.flatMap { [StackItem(kind: .header, height: density.headerHeight), StackItem(kind: .lane, height: laneHeight($0, density: density))] }
+        present.flatMap { [StackItem(kind: .header, height: density.headerHeight), StackItem(kind: .lane, height: laneHeight($0, density: density), lane: $0)] }
     }
 
     func totalHeight(density: TimelineDensity) -> CGFloat {

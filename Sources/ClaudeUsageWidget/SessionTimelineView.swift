@@ -301,7 +301,7 @@ struct SessionTimelineView: View {
         .overlay { pointerSurface(g) }
         // The crosshair and cards live in an overlay that observes the hover model, so the charts above never redraw.
         .overlay(alignment: .topLeading) {
-            TimelineHoverOverlay(hover: hover, timeline: timeline, geometry: g, bands: layout.bands)
+            TimelineHoverOverlay(hover: hover, timeline: timeline, geometry: g, bands: layout.bands, lanes: lanes)
         }
     }
 
@@ -339,7 +339,7 @@ struct SessionTimelineView: View {
             hover.pointerLeft()
             return
         }
-        let target = TimelineHitTester.target(atX: Double(point.x), y: Double(point.y), width: width, bands: bands, geometry: g)
+        let target = TimelineHitTester.target(atX: Double(point.x), y: Double(point.y), width: width, bands: bands, geometry: g, lanes: lanes)
         let x = TimelineHitTester.x(atPixel: Double(point.x), width: width, geometry: g)
         hover.pointerMoved(to: point, target: target, focus: g.nearestCall(to: x))
     }
@@ -780,6 +780,7 @@ struct TimelineHoverOverlay: View {
     let timeline: SessionTimeline
     let geometry: TimelineGeometry
     let bands: [PanelBand]
+    let lanes: FeatureLanes
 
     var body: some View {
         GeometryReader { box in
@@ -837,6 +838,8 @@ struct TimelineHoverOverlay: View {
             if let m = timeline.markers.first(where: { $0.id == id }) { MarkerCard(marker: m, timeline: timeline, width: width) }
         case .modelSpan(let id):
             if let s = timeline.modelSpans.first(where: { $0.id == id }) { ModelSpanCard(span: s, timeline: timeline, width: width) }
+        case .lane(let target):
+            LaneCard(target: target, lanes: lanes, width: width)
         }
     }
 
@@ -846,7 +849,14 @@ struct TimelineHoverOverlay: View {
     }
 
     private func size(of target: HoverTarget, in container: CGSize) -> CGSize {
-        let height: CGFloat = { if case .call = target { 470 } else if case .modelSpan = target { 120 } else { 130 } }()
+        let height: CGFloat = {
+            switch target {
+            case .call: 470
+            case .modelSpan: 120
+            case .lane: 150
+            default: 130
+            }
+        }()
         return CGSize(width: cardWidth(for: target, in: container), height: height)
     }
 
@@ -874,6 +884,8 @@ struct TimelineHoverOverlay: View {
             let span = timeline.modelSpans.first { $0.id == id }
             let mid = span.map { (geometry.xRange(of: $0).lowerBound + geometry.xRange(of: $0).upperBound) / 2 } ?? 0
             return CGPoint(x: TimelineHitTester.pixel(forX: mid, width: width, geometry: geometry), y: 10)
+        case .lane:
+            return CGPoint(x: width / 2, y: container.height - 40)
         }
     }
 }
