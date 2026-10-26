@@ -27,12 +27,19 @@ public struct RecordStore: Sendable {
     /// Prompts, slash commands and compactions, deduplicated by transcript id. Forked sessions replay rows into new files.
     public private(set) var events: [SessionEvent] = []
     private var eventIDs: Set<String> = []
+    /// Loop wake-ups and decisions, sub-agent spawns and test runs, deduplicated by signal id.
+    public private(set) var signals: [FeatureSignal] = []
+    private var signalIDs: Set<String> = []
     private var index: [String: Int] = [:]
 
     public init() {}
 
     public mutating func add(_ event: SessionEvent) {
         if eventIDs.insert(event.id).inserted { events.append(event) }
+    }
+
+    public mutating func add(_ signal: FeatureSignal) {
+        if signalIDs.insert(signal.id).inserted { signals.append(signal) }
     }
 
     public mutating func add(_ rec: UsageRecord) {

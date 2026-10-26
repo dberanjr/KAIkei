@@ -134,5 +134,13 @@ func outputLine(toolID: String = "t5", text: String) -> String {
         #expect(a.id == b.id)
     }
 
+    @Test func theSameSignalTwiceCountsOnce() throws {
+        var store = RecordStore()
+        let s = try #require(signal(scheduleLine(toolID: "t9")))
+        store.add(s)
+        store.add(s)
+        #expect(store.signals == [s])
+    }
+
     private func toolUseLineWithNewUUID(_ line: String) -> String { line.replacingOccurrences(of: #""uuid":"a1""#, with: #""uuid":"zz""#) }
 }

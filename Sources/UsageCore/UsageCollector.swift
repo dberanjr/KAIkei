@@ -40,6 +40,8 @@ public struct Dashboard: Sendable {
     public var records: [UsageRecord]
     /// Prompts, slash commands and compactions, for the session timeline.
     public var events: [SessionEvent]
+    /// Loop, sub-agent and test-run rows, for the feature lanes under the session timeline.
+    public var signals: [FeatureSignal]
     public var liveCost: Double { live.reduce(0) { $0 + $1.cost } }
     public var liveUsage: TokenUsage { live.reduce(TokenUsage()) { $0 + $1.usage } }
 }
@@ -89,7 +91,7 @@ public final class UsageCollector {
             snapshots[range] = Aggregator.snapshot(records: records, range: range, now: now, calendar: calendar, billing: billing)
         }
         let trend = Trends.summary(daily: snapshots[.all]?.daily ?? [], now: now, calendar: calendar)
-        return Dashboard(generatedAt: now, live: live, snapshots: snapshots, account: accountInfo, plan: plan, trend: trend, records: records, events: store.events)
+        return Dashboard(generatedAt: now, live: live, snapshots: snapshots, account: accountInfo, plan: plan, trend: trend, records: records, events: store.events, signals: store.signals)
     }
 
     /// The identity file is a few hundred KB that Claude Code rewrites constantly, and who you are changes rarely,
