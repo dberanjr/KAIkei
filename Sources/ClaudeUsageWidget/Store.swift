@@ -98,6 +98,8 @@ final class UsageStore: ObservableObject {
     @Published var featureOverlayLanes: Set<FeatureLane> {
         didSet { defaults.set(featureOverlayLanes.map(\.rawValue).sorted(), forKey: "featureOverlayLanes") }
     }
+    /// Draws a faint vertical line at every prompt you typed on the context chart. Off by default.
+    @Published var promptOverlayOn: Bool { didSet { defaults.set(promptOverlayOn, forKey: "promptOverlayOn") } }
     @Published var showSettings = false
     /// Sessions folded down to one line. Remembered across launches, by session id.
     @Published var collapsedSessions: Set<String> { didSet { defaults.set(collapsedSessions.sorted(), forKey: "collapsedSessions") } }
@@ -133,6 +135,7 @@ final class UsageStore: ObservableObject {
         featureOverlayLanes = defaults.object(forKey: "featureOverlayLanes") == nil
             ? Set(FeatureLane.allCases)
             : Set((defaults.stringArray(forKey: "featureOverlayLanes") ?? []).compactMap(FeatureLane.init(rawValue:)))
+        promptOverlayOn = defaults.object(forKey: "promptOverlayOn") as? Bool ?? false
         collapsedSessions = Set(defaults.stringArray(forKey: "collapsedSessions") ?? [])
         archivedSessions = Set(defaults.stringArray(forKey: "archivedSessions") ?? [])
         timelineHover.sliceDelay = hoverDelay  // after every stored property is set, so self is usable
@@ -148,6 +151,17 @@ final class UsageStore: ObservableObject {
         let lanes = FeatureLanes.build(signals: signals, timeline: timeline, sessionID: sessionID)
         laneCache[sessionID] = (key, lanes)
         return lanes
+    }
+
+    private var adviceCache: [String: (key: [Int], markers: [AdviceMarker])] = [:]
+
+    /// Where the compact advisor would have spoken during a session, rebuilt only when its calls or costs change.
+    func adviceMarkers(sessionID: String, timeline: SessionTimeline) -> [AdviceMarker] {
+        let key = FeatureLanes.cacheKey(timeline: timeline, signalCount: timeline.markers.count)
+        if let hit = adviceCache[sessionID], hit.key == key { return hit.markers }
+        let markers = AdviceHistory.markers(timeline: timeline, billing: billing)
+        adviceCache[sessionID] = (key, markers)
+        return markers
     }
 
     func toggleCollapsed(_ id: String) {

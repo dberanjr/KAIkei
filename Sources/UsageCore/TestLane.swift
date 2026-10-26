@@ -91,6 +91,14 @@ public struct TestRun: Identifiable, Equatable, Sendable {
     public var time: Date
     public var command: String
     public var summary: TestSummary?
+
+    /// The part of the command that runs the tests, on one line and cut to 60 characters, for hover cards. The full command
+    /// can be a long script.
+    public var shortCommand: String {
+        let segment = TranscriptParser.testCommandSegment(command) ?? command.split(separator: "\n").first.map(String.init) ?? command
+        let collapsed = segment.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return collapsed.count > 60 ? String(collapsed.prefix(60)) + "…" : collapsed
+    }
 }
 
 public struct TestLane: Equatable, Sendable {

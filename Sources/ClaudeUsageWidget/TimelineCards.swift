@@ -45,6 +45,26 @@ private struct Row: View {
     }
 }
 
+/// One line of the card's table: a swatch and label, then right-aligned columns for tokens, share of the context and cost.
+private struct TableRow: View {
+    let label: String, tokens: String, share: String, cost: String
+    var swatch: Color?
+    var header = false
+    var body: some View {
+        HStack(spacing: 6) {
+            if let swatch { RoundedRectangle(cornerRadius: 2).fill(swatch).frame(width: 8, height: 8) }
+            else { Color.clear.frame(width: 8, height: 8) }
+            Text(label).foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(tokens).frame(width: 52, alignment: .trailing)
+            Text(share).foregroundStyle(header ? .secondary : .tertiary).frame(width: 78, alignment: .trailing).lineLimit(1)
+            Text(cost).frame(width: 54, alignment: .trailing)
+        }
+        .font(header ? .caption2 : .caption).monospacedDigit()
+        .foregroundStyle(header ? .tertiary : .primary)
+    }
+}
+
 /// Everything about one call: the "time slice" that ends at it.
 struct CallCard: View {
     let call: CallPoint
@@ -77,8 +97,6 @@ struct CallCard: View {
                 Divider()
                 contextSection(window: window, total: context)
                 Divider()
-                costSection
-                Divider()
                 cacheSection
                 if !call.tools.isEmpty || call.skill != nil { toolsSection }
                 if !slice.isEmpty { eventsSection(slice) }
@@ -98,8 +116,10 @@ struct CallCard: View {
         }
     }
 
+    /// Context and cost in one table: what each part of the context was, its share, and what it cost on this call.
     private func contextSection(window: Int, total: Int) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let p = call.costParts
+        return VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Context").font(.caption.weight(.semibold))
                 Text(Fmt.tokens(call.contextTokens)).font(.callout.weight(.semibold)).monospacedDigit()
@@ -114,10 +134,21 @@ struct CallCard: View {
                     Rectangle().fill(Theme.ramp[3]).frame(width: max(call.freshInput > 0 ? 2 : 0, g.size.width * Double(call.freshInput) / Double(total)))
                 }.clipShape(Capsule())
             }.frame(height: 7)
-            Row(label: "Cache read", value: Fmt.tokens(call.cacheRead), detail: Fmt.percent(Double(call.cacheRead) / Double(total) * 100), swatch: Theme.ramp[0])
-            Row(label: "Cache write", value: Fmt.tokens(call.cacheWrite), detail: Fmt.percent(Double(call.cacheWrite) / Double(total) * 100), swatch: Theme.ramp[1])
-            Row(label: "Uncached input", value: Fmt.tokens(call.freshInput), detail: Fmt.percent(Double(call.freshInput) / Double(total) * 100), swatch: Theme.ramp[3])
-            Row(label: "Output", value: Fmt.tokens(call.output), detail: call.thinkingTokens > 0 ? "\(Fmt.tokens(call.thinkingTokens)) thinking" : nil, swatch: Theme.ramp[2])
+            TableRow(label: "", tokens: "tokens", share: "share", cost: "cost", header: true)
+            TableRow(label: "Cache read", tokens: Fmt.tokens(call.cacheRead), share: Fmt.percent(Double(call.cacheRead) / Double(total) * 100), cost: Fmt.money(p.cacheRead), swatch: Theme.ramp[0])
+            TableRow(label: "Cache write", tokens: Fmt.tokens(call.cacheWrite), share: Fmt.percent(Double(call.cacheWrite) / Double(total) * 100), cost: Fmt.money(p.cacheWrite), swatch: Theme.ramp[1])
+            TableRow(label: "Uncached input", tokens: Fmt.tokens(call.freshInput), share: Fmt.percent(Double(call.freshInput) / Double(total) * 100), cost: Fmt.money(p.input), swatch: Theme.ramp[3])
+            TableRow(label: "Output", tokens: Fmt.tokens(call.output), share: call.thinkingTokens > 0 ? "\(Fmt.tokens(call.thinkingTokens)) thinking" : "", cost: Fmt.money(p.output), swatch: Theme.ramp[2])
+            Divider()
+            HStack(alignment: .firstTextBaseline) {
+                RoundedRectangle(cornerRadius: 2).fill(Theme.seriesCostPerCall).frame(width: 8, height: 8)
+                Text("Cost of this call").font(.caption.weight(.semibold))
+                Spacer()
+                Text(Fmt.money(call.cost)).font(.callout.weight(.semibold)).monospacedDigit()
+            }
+            let sessionTotal = timeline.totalCost
+            TableRow(label: "Cost so far", tokens: "", share: sessionTotal > 0 ? Fmt.percent(call.cumulativeCost / sessionTotal * 100) : "",
+                     cost: Fmt.money(call.cumulativeCost), swatch: Theme.seriesCumulative)
         }
     }
 
@@ -127,25 +158,6 @@ struct CallCard: View {
         let delta = call.contextTokens - previous.contextTokens
         if delta == 0 { return "no change" }
         return (delta > 0 ? "+" : "−") + Fmt.tokens(abs(delta)) + " since previous"
-    }
-
-    private var costSection: some View {
-        let p = call.costParts
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                RoundedRectangle(cornerRadius: 2).fill(Theme.seriesCostPerCall).frame(width: 8, height: 8)
-                Text("Cost of this call").font(.caption.weight(.semibold))
-                Text(Fmt.money(call.cost)).font(.callout.weight(.semibold)).monospacedDigit()
-                Spacer()
-            }
-            Row(label: "Cache reads", value: Fmt.money(p.cacheRead), swatch: Theme.ramp[0])
-            Row(label: "Cache writes", value: Fmt.money(p.cacheWrite), swatch: Theme.ramp[1])
-            Row(label: "Output", value: Fmt.money(p.output), swatch: Theme.ramp[2])
-            Row(label: "Input", value: Fmt.money(p.input), swatch: Theme.ramp[3])
-            let total = timeline.totalCost
-            Row(label: "Cost so far", value: Fmt.money(call.cumulativeCost),
-                detail: total > 0 ? Fmt.percent(call.cumulativeCost / total * 100) : nil, swatch: Theme.seriesCumulative)
-        }
     }
 
     private var cacheSection: some View {
@@ -347,7 +359,7 @@ struct LaneCard: View {
 
     @ViewBuilder private func testRun(_ run: TestRun) -> some View {
         title("Test run", .tests, trailing: clock(run.time))
-        line(run.command)
+        Text(run.shortCommand).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
         Divider()
         if let s = run.summary {
             let pct = s.total > 0 ? Double(s.passed) / Double(s.total) * 100 : 0
@@ -355,6 +367,47 @@ struct LaneCard: View {
             line("Read from \(s.runner) output")
         } else {
             line("The result could not be read from the output")
+        }
+    }
+}
+
+/// Hover card for a place on the suggestions bar: what the advisor would have said, and when.
+struct AdviceCard: View {
+    let marker: AdviceMarker
+    var width: CGFloat = 290
+
+    var body: some View {
+        CardChrome(width: width) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: marker.level.symbol).foregroundStyle(marker.level.color)
+                    Text(marker.headline).font(.callout.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                }
+                Text(clock(marker.time)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                Divider()
+                Text(marker.detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text("Replayed from the transcript at today's list prices: where KAIkei would have suggested this.")
+                    .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+extension CompactAdvice.Level {
+    var symbol: String {
+        switch self {
+        case .fine: "checkmark.circle"
+        case .consider: "lightbulb.fill"
+        case .compactSoon: "exclamationmark.triangle.fill"
+        case .coldCache: "snowflake"
+        }
+    }
+    var color: Color {
+        switch self {
+        case .fine: Theme.good
+        case .consider: Theme.accent
+        case .compactSoon: Theme.caution
+        case .coldCache: Theme.accent
         }
     }
 }
