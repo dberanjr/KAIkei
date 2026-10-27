@@ -12,3 +12,6 @@
 
 # Local brainstorming and plan-execution scratch
 .superpowers/
+
+# Latest built app, copied here by `make app`
+/KAIkei/

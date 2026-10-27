@@ -9,8 +9,11 @@ test:
 	$(SWIFT) test $(FLAGS)
 build:
 	$(SWIFT) build $(FLAGS) -c release
+# The signed app is built outside OneDrive, then copied (without xattrs) to ./KAIkei/ so it is easy to find.
+# Launch the copy in ~/Library/Caches (the one `make run` opens) if OneDrive ever invalidates the copy's signature.
 app:
 	SCRATCH=$(SCRATCH) scripts/build_app.sh
+	mkdir -p KAIkei && rm -rf KAIkei/KAIkei.app && ditto --norsrc --noextattr "$(dir $(SCRATCH))KAIkei.app" KAIkei/KAIkei.app
 # Resources/AppIcon.icns is committed; run this only after replacing Resources/AppIcon-source.png.
 icon:
 	scripts/make_icon.sh
