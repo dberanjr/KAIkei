@@ -80,6 +80,8 @@ public struct TurnEnd: Identifiable, Equatable, Sendable {
     /// Tokens the model read across the turn's main-thread responses (fresh and cached), and tokens it wrote.
     public var inputTokens: Int
     public var outputTokens: Int
+    /// Extended-thinking tokens in the turn's main-thread responses (already counted inside `outputTokens`).
+    public var thinkingTokens: Int
     /// Everything the turn billed, sub-agents included.
     public var cost: Double
     public var id: String { "turn-\(turn)" }
@@ -139,7 +141,16 @@ public enum Timelines {
 
         var timeline = SessionTimeline()
         timeline.markers = sessionEvents.compactMap(marker)
-        let promptTimes = timeline.markers.compactMap { m -> Date? in if case .prompt = m.kind { m.time } else { nil } }
+        let promptTimes = timeline.markers.compactMap { m -> Date? in if case .prompt = m.kind { m.time } else { nil } }.sorted()
+        /// How many prompts had been typed by `time`: a binary search, because a long session has tens of thousands of both.
+        func promptsTyped(by time: Date) -> Int {
+            var low = 0, high = promptTimes.count
+            while low < high {
+                let mid = (low + high) / 2
+                if promptTimes[mid] <= time { low = mid + 1 } else { high = mid }
+            }
+            return low
+        }
 
         let main = mine.filter { !$0.isSidechain }
         timeline.cacheTTL = main.contains { $0.usage.cacheWrite1h > 0 } ? 3600 : 300
@@ -156,7 +167,7 @@ public enum Timelines {
                 thinkingTokens: r.thinkingTokens, effort: r.effort, cost: r.cost(billing),
                 costParts: Pricing.costParts(of: r.usage, model: r.model, billing: billing), isSidechain: r.isSidechain,
                 idleGap: gap, cacheExpired: gap.map { $0 > timeline.cacheTTL } ?? false,
-                turn: promptTimes.filter { $0 <= r.timestamp }.count, tools: r.tools.values.sorted(), skill: r.skill, plugin: r.plugin,
+                turn: promptsTyped(by: r.timestamp), tools: r.tools.values.sorted(), skill: r.skill, plugin: r.plugin,
                 agentID: r.agentID, spawnToolUseID: r.spawnToolUseID, cumulativeCost: 0)
         }
         var running = 0.0
@@ -184,7 +195,8 @@ public enum Timelines {
             return TurnEnd(
                 turn: i + 1, time: end, duration: max(0, end.timeIntervalSince(promptTimes[i])), calls: main.count,
                 tools: main.reduce(0) { $0 + $1.tools.count }, inputTokens: main.reduce(0) { $0 + $1.contextTokens },
-                outputTokens: main.reduce(0) { $0 + $1.output }, cost: turn.reduce(0) { $0 + $1.cost })
+                outputTokens: main.reduce(0) { $0 + $1.output },
+                thinkingTokens: main.reduce(0) { $0 + $1.thinkingTokens }, cost: turn.reduce(0) { $0 + $1.cost })
         }
     }
 

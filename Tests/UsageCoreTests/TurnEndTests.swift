@@ -72,3 +72,17 @@ import Testing
         #expect(hit(minute: 6.5, y: 15) == nil)
     }
 }
+
+@Suite struct TimelineScaleTests {
+    @Test func aSessionWithTensOfThousandsOfPromptsBuildsQuickly() {
+        let n = 20_000
+        let records = (0..<n).map { tcall("c\($0)", minute: Double($0) + 0.5) }
+        let events = (0..<n).map { tevent("p\($0)", minute: Double($0), .prompt(preview: "p")) }
+        let start = Date()
+        let t = Timelines.build(records: records, events: events, sessionID: "s1")
+        #expect(t.turnEnds.count == n)
+        #expect(t.calls.last?.turn == n && t.calls.first?.turn == 1)
+        // Quadratic work here took many seconds; the bound is generous so a slow machine does not flake.
+        #expect(Date().timeIntervalSince(start) < 4)
+    }
+}
