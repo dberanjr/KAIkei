@@ -52,18 +52,44 @@ struct AdvisorWorld {
         #expect(world("claude-opus-5-5", []).advise("fix the typo in the README")?.model == nil)
     }
 
-    @Test func aShortUnlabelledPromptNeedsThreeLightTurnsToDownshift() {
-        #expect(world("claude-opus-5-5", light3).advise("add a loading spinner to the save button")?.model?.tier == .sonnet)
-        #expect(world("claude-opus-5-5", [.light, .light]).advise("add a loading spinner to the save button")?.model == nil)
+    @Test func anUnlabelledPromptNeverDownshiftsNoMatterHowQuietTheSession() {
+        #expect(world("claude-opus-5-5", light3).advise("add a loading spinner to the save button")?.model == nil)
+        #expect(world("claude-opus-5-5", light3).advise("yes go ahead")?.model == nil)
+    }
+
+    @Test func aLongPromptWithALightWordDoesNotDownshift() {
+        let long = "explain why login fails after the token refresh, here is the stack trace from the server logs and the client, "
+            + "the retry loop looks wrong when two tabs are open and I am not sure which side is at fault"
+        #expect(world("claude-opus-5-5", light3).advise(long)?.model == nil)
+    }
+
+    @Test func theReasonCountsTheLightTurnsThereReallyWere() throws {
+        let two = try #require(world("claude-opus-5-5", [.heavy, .light, .light]).advise("fix the typo in the README"))
+        #expect(two.line.contains("2 light turns"))
+        let three = try #require(world("claude-opus-5-5", light3).advise("fix the typo in the README"))
+        #expect(three.line.contains("3 light turns"))
+    }
+
+    @Test func anApprovalAfterHeavyTurnsDoesNotTriggerTheStruggleUpshift() {
+        #expect(world("claude-sonnet-5-5", heavy3).advise("thanks")?.model == nil)
+        // The status line has no prompt at all, so it does not guess from volume alone either.
+        #expect(world("claude-sonnet-5-5", heavy3).advise(nil)?.model == nil)
+    }
+
+    @Test func theModelClaudeCodeReportsNowBeatsTheTranscript() {
+        let w = world("claude-opus-5-5", light3)
+        let t = w.timeline()
+        // The transcript's last response was on Opus, but the live model is already Sonnet: you just switched.
+        #expect(PromptAdvisor.advise(timeline: t, prompt: "fix the typo in the README", now: w.now(t), liveModelID: "claude-sonnet-5-5")?.model == nil)
+        #expect(PromptAdvisor.advise(timeline: t, prompt: "fix the typo in the README", now: w.now(t), liveModelID: "claude-opus-5-5")?.model?.tier == .sonnet)
     }
 
     @Test func aHardPromptNeverDownshifts() {
         #expect(world("claude-opus-5-5", light3).advise("find the root cause of the memory leak")?.model == nil)
     }
 
-    @Test func aHeavyProjectBlocksADownshiftOnAnUnlabelledPrompt() {
+    @Test func aHeavyProjectStillAllowsADownshiftForClearlyLightWork() {
         let heavyProject = ProjectProfile(turns: 40, heavy: 24, light: 4)
-        #expect(world("claude-opus-5-5", light3).advise("add a loading spinner to the save button", project: heavyProject)?.model == nil)
         #expect(world("claude-opus-5-5", light3).advise("fix the typo in the README", project: heavyProject)?.model?.tier == .sonnet)
     }
 

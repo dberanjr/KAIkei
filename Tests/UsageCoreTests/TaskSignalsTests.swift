@@ -55,6 +55,32 @@ import Testing
         #expect(PromptClassifier.classify("find the root cause of the leak").cue == "root cause")
     }
 
+    @Test func aLongOrMultiLinePromptIsNeverLightEvenWithALightWordInIt() {
+        let long = "explain why login fails after the token refresh, here is the stack trace from the server logs and the client, "
+            + "the retry loop looks wrong when two tabs are open and I am not sure which side is at fault"
+        #expect(PromptClassifier.classify(long).kind != .light)
+        #expect(PromptClassifier.classify("explain this\nTraceback (most recent call last)").kind != .light)
+        #expect(PromptClassifier.classify("explain ```swift\nlet x = 1\n```").kind != .light)
+    }
+
+    @Test func cuesMatchWholeWordsNotFragments() {
+        #expect(PromptClassifier.classify("fix the eslint config").kind != .light)       // "lint" inside "eslint"
+        #expect(PromptClassifier.classify("tweak the typography").kind != .light)        // "typo" inside "typography"
+        #expect(PromptClassifier.classify("fix the typos in the docs").kind == .light)   // plural still counts
+        #expect(PromptClassifier.classify("overwrite the file").kind != .strongHeavy)    // no "rewrite" in "overwrite"
+    }
+
+    @Test func designWordsInADocumentationRequestAreNotHeavy() {
+        #expect(PromptClassifier.classify("rewrite the commit message").kind == .light)
+        #expect(PromptClassifier.classify("update the architecture diagram in the README").kind != .strongHeavy)
+        #expect(PromptClassifier.classify("design the architecture for the sync engine").kind == .strongHeavy)
+    }
+
+    @Test func approvalsAreNotTasks() {
+        for p in ["yes go ahead", "thanks", "ok", "lgtm!", "continue", "sure, do it"] { #expect(PromptClassifier.isAcknowledgement(p), "\(p)") }
+        #expect(!PromptClassifier.isAcknowledgement("ok now the second endpoint"))
+    }
+
     @Test func newTopicWordsAreRecognised() {
         #expect(PromptClassifier.startsNewTopic("new task: add a settings page"))
         #expect(PromptClassifier.startsNewTopic("unrelated, but can you check the CI config"))

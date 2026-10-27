@@ -41,11 +41,14 @@ public enum PromptClassifier {
         public var cue: String?
     }
 
-    static let strongHeavy = [
+    /// Hard on their own: a technical problem that wants careful reasoning.
+    static let hardProblems = [
         "root cause", "race condition", "deadlock", "memory leak", "security review", "security audit", "threat model",
-        "architecture", "architect", "design the", "design a", "system design", "trade-off", "tradeoff", "migrate", "migration plan",
-        "rewrite", "performance regression", "concurrency", "vulnerab",
+        "performance regression", "concurrency", "vulnerab", "system design", "trade-off", "tradeoff",
     ]
+    /// Hard when they are about the code, not when they are about writing something up ("update the architecture diagram").
+    static let designWords = ["architecture", "architect", "design the", "design a", "migrate", "migration plan", "rewrite"]
+    static let writingContext = ["commit message", "diagram", "readme", "docs", "documentation", "comment", "changelog", "docstring"]
     static let lightCues = [
         "typo", "rename", "reformat", "format the", "lint", "commit message", "docstring", "add a comment", "add comments",
         "what does", "what is", "explain", "summarize", "summarise", "list the", "show me", "run the test", "run tests", "git status",
@@ -53,20 +56,54 @@ public enum PromptClassifier {
     ]
     static let weakHeavy = ["refactor", "debug", "investigate", "why is", "why does", "optimi", "across the", "implement"]
     static let newTopic = ["new task", "unrelated", "different topic", "something else", "switching gears", "start over", "separate question", "new feature:"]
+    static let acknowledgements: Set<String> = [
+        "yes", "yep", "yeah", "ok", "okay", "thanks", "thank", "lgtm", "continue", "sure", "go", "proceed", "do", "approved", "great",
+        "nice", "good", "perfect",
+    ]
     static let longPrompt = 800
+    /// A prompt this long, or with code or a stack trace in it, is not "light work" whatever words it contains.
+    static let lightPromptLimit = 160
+
+    /// A phrase at the start of a word ("optimi" in "optimize"), compiled once.
+    private static func startsWord(_ cues: [String]) -> [NSRegularExpression] {
+        cues.compactMap { try? NSRegularExpression(pattern: "\\b" + NSRegularExpression.escapedPattern(for: $0)) }
+    }
+    /// A whole word, allowing a plural or common ending ("typo", "typos", "linting"), compiled once.
+    private static func wholeWord(_ cues: [String]) -> [NSRegularExpression] {
+        cues.compactMap { try? NSRegularExpression(pattern: "\\b" + NSRegularExpression.escapedPattern(for: $0) + "(s|es|ed|ing)?\\b") }
+    }
+    private static let hardRegex = startsWord(hardProblems), designRegex = startsWord(designWords), writingRegex = startsWord(writingContext)
+    private static let weakRegex = startsWord(weakHeavy), lightRegex = wholeWord(lightCues)
+
+    private static func firstHit(_ regexes: [NSRegularExpression], in text: String, cues: [String]) -> String? {
+        let range = NSRange(text.startIndex..., in: text)
+        for (regex, cue) in zip(regexes, cues) where regex.firstMatch(in: text, range: range) != nil { return cue }
+        return nil
+    }
 
     public static func classify(_ prompt: String) -> Result {
         let text = prompt.lowercased()
-        if let cue = strongHeavy.first(where: text.contains) { return Result(kind: .strongHeavy, cue: cue) }
-        if let cue = weakHeavy.first(where: text.contains) { return Result(kind: .weakHeavy, cue: cue) }
+        if let cue = firstHit(hardRegex, in: text, cues: hardProblems) { return Result(kind: .strongHeavy, cue: cue) }
+        if firstHit(writingRegex, in: text, cues: writingContext) == nil,
+            let cue = firstHit(designRegex, in: text, cues: designWords) { return Result(kind: .strongHeavy, cue: cue) }
+        if let cue = firstHit(weakRegex, in: text, cues: weakHeavy) { return Result(kind: .weakHeavy, cue: cue) }
         if text.count >= longPrompt { return Result(kind: .weakHeavy, cue: "a long, detailed prompt") }
-        if let cue = lightCues.first(where: text.contains) { return Result(kind: .light, cue: cue) }
+        let looksLikeCode = text.contains("\n") || text.contains("```")
+        if text.count <= lightPromptLimit, !looksLikeCode, let cue = firstHit(lightRegex, in: text, cues: lightCues) {
+            return Result(kind: .light, cue: cue)
+        }
         return Result(kind: .unknown, cue: nil)
     }
 
     public static func startsNewTopic(_ prompt: String) -> Bool {
         let text = prompt.lowercased()
         return newTopic.contains(where: text.contains)
+    }
+
+    /// "yes go ahead", "thanks", "ok": a reply to Claude, not a task, so it says nothing about how hard the work is.
+    public static func isAcknowledgement(_ prompt: String) -> Bool {
+        let words = prompt.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        return !words.isEmpty && words.count <= 3 && acknowledgements.contains(words[0])
     }
 }
 

@@ -58,11 +58,11 @@ public struct TerminalAdvice: Equatable, Sendable {
 public enum PromptAdvisor {
     static let deferAbove = 0.20
     static let payBackWithin = 15.0
-    static let shortPrompt = 100
     static let prefix = "KAIkei ▸ "
 
     public static func advise(
-        timeline: SessionTimeline, prompt: String?, now: Date, billing: CacheWriteBilling = .listPrice, project: ProjectProfile? = nil
+        timeline: SessionTimeline, prompt: String?, now: Date, billing: CacheWriteBilling = .listPrice, project: ProjectProfile? = nil,
+        liveModelID: String? = nil
     ) -> TerminalAdvice? {
         guard let last = timeline.mainCalls.last, let advice = CompactAdvisor.advise(timeline: timeline, now: now, billing: billing) else { return nil }
         let newTopic = prompt.map(PromptClassifier.startsNewTopic) ?? false
@@ -74,7 +74,8 @@ public enum PromptAdvisor {
         case .consider: compact = .compact
         case .fine: break
         }
-        let move = modelMove(timeline: timeline, last: last, prompt: prompt, cold: advice.cacheIsCold, billing: billing, project: project)
+        let move = modelMove(
+            timeline: timeline, last: last, prompt: prompt, cold: advice.cacheIsCold, billing: billing, project: project, liveModelID: liveModelID)
         guard compact != nil || move != nil else { return nil }
 
         let (line, short) = words(compact: compact, move: move?.move, reason: move?.reason, advice: advice, context: last.contextTokens, currentTier: ModelTier(modelID: last.model))
@@ -87,9 +88,12 @@ public enum PromptAdvisor {
     struct Reason { var text: String }
 
     private static func modelMove(
-        timeline: SessionTimeline, last: CallPoint, prompt: String?, cold: Bool, billing: CacheWriteBilling, project: ProjectProfile?
+        timeline: SessionTimeline, last: CallPoint, prompt: String?, cold: Bool, billing: CacheWriteBilling, project: ProjectProfile?,
+        liveModelID: String?
     ) -> (move: TerminalAdvice.ModelMove, reason: Reason)? {
         guard let tier = ModelTier(modelID: last.model) else { return nil }
+        // The live model can be ahead of the transcript: you switched, and no response on the new model has landed yet.
+        if let live = liveModelID.flatMap(ModelTier.init(modelID:)), live != tier { return nil }
         // Someone who just picked this model has a reason; don't argue with it for a few responses.
         if timeline.modelSpans.count > 1, let span = timeline.modelSpans.last, span.callCount <= 3 { return nil }
 
@@ -100,15 +104,13 @@ public enum PromptAdvisor {
         let lastThreeHeavy = recent.count == 3 && heavyCount == 3
         let heavyProject = project?.isUsuallyHeavy ?? false
         let read = prompt.map(PromptClassifier.classify) ?? PromptClassifier.Result(kind: .unknown, cue: nil)
-        let isShort = (prompt?.count ?? Int.max) <= shortPrompt
 
         var target: (tier: ModelTier, direction: TerminalAdvice.Direction, reason: String)?
 
-        // Down: only when the stronger model is more than this work needs.
+        // Down: only when the prompt itself says the work is light (an approval or an unlabelled request says nothing) and the
+        // last turns agree.
         if read.kind == .light, lastTwoLight, let cheaper = tier.cheaper, cheaper != .haiku || (lastThreeLight && !heavyProject) {
-            target = (cheaper, .cheaper, "Light work (\(read.cue ?? "this")) after \(recent.count == 3 ? "3" : "2") light turns")
-        } else if read.kind == .unknown, isShort, lastThreeLight, !heavyProject, let cheaper = tier.cheaper, cheaper != .haiku {
-            target = (cheaper, .cheaper, "A short prompt after 3 light turns")
+            target = (cheaper, .cheaper, "Light work (\(read.cue ?? "this")) after \(lastThreeLight ? 3 : 2) light turns")
         }
 
         // Up: the work looks hard, and the session or project agrees (or the prompt is hard enough on its own).
@@ -118,7 +120,7 @@ public enum PromptAdvisor {
                 target = (stronger, .stronger, "Hard one (\(read.cue ?? "this"))")
             } else if small, read.kind == .weakHeavy, heavyCount >= 2 || heavyProject {
                 target = (stronger, .stronger, "“\(read.cue ?? "this")” after \(heavyCount >= 2 ? "\(heavyCount) heavy turns" : "a heavy project")")
-            } else if small, lastThreeHeavy {
+            } else if small, lastThreeHeavy, let prompt, !PromptClassifier.isAcknowledgement(prompt) {
                 target = (stronger, .stronger, "3 heavy turns in a row")
             }
         }
