@@ -88,12 +88,46 @@ public struct AdvisorEngine {
 
     // MARK: the status line
 
+    /// The status line can run several times a second, so the text is cached by the transcript's size and modification time,
+    /// the minute (the cache countdown) and the figures Claude Code passed in.
     public func statusLine(_ data: Data, color: Bool) -> String {
-        guard let input = Self.parse(data), let timeline = timeline(sessionID: input.sessionID, transcript: input.transcript) else { return "KAIkei" }
+        guard let input = Self.parse(data) else { return "KAIkei" }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: input.transcript.path)
+        guard let size = attributes?[.size] as? NSNumber, let modified = attributes?[.modificationDate] as? Date else { return "KAIkei" }
+        let key = "\(size):\(Int(modified.timeIntervalSince1970)):\(Int(now().timeIntervalSince1970 / 60)):\(input.costUSD ?? -1):\(input.contextPercent ?? -1):\(color)"
+        let cacheURL = stateDir.appendingPathComponent("cache/status-\(Self.safe(input.sessionID)).json")
+        struct Cached: Codable { var key: String; var text: String }
+        if let cached = try? JSONDecoder().decode(Cached.self, from: Data(contentsOf: cacheURL)), cached.key == key { return cached.text }
+
+        guard let timeline = timeline(sessionID: input.sessionID, transcript: input.transcript) else { return "KAIkei" }
         let advice = PromptAdvisor.advise(timeline: timeline, prompt: nil, now: now(), project: projectProfile(for: input.transcript))
         // Claude Code's own cost and context figures win: the transcript tail only knows the recent part of the session.
-        return StatusLineText.make(
+        let text = StatusLineText.make(
             timeline: timeline, advice: advice, now: now(), color: color, cost: input.costUSD, contextPercent: input.contextPercent)
+        try? FileManager.default.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(Cached(key: key, text: text)).write(to: cacheURL, options: .atomic)
+        return text
+    }
+
+    // MARK: explain
+
+    /// What the advice would be for a transcript and prompt, and what it rests on. For `kaikei-advise explain`.
+    public func explain(transcript: URL, prompt: String?) -> String {
+        let session = transcript.deletingPathExtension().lastPathComponent
+        guard let timeline = timeline(sessionID: session, transcript: transcript), let last = timeline.mainCalls.last else {
+            return "No responses found in \(transcript.path) for session \(session)."
+        }
+        let profile = projectProfile(for: transcript)
+        let read = prompt.map(PromptClassifier.classify)
+        var lines = [
+            "Model: \(ModelTier(modelID: last.model)?.displayName ?? last.model), context \(CompactAdvisor.tokens(last.contextTokens)) of \(CompactAdvisor.tokens(timeline.contextWindow))",
+            "Recent turns: " + (timeline.turnEnds.suffix(3).map { "\(TurnWeight.of($0)) (\($0.tools) tools, \(CompactAdvisor.tokens($0.outputTokens)) out, \(Int($0.duration))s)" }.joined(separator: ", ")),
+            "Project: \(profile.turns) recent turns, \(profile.heavy) heavy, \(profile.light) light" + (profile.isUsuallyHeavy ? " (usually heavy)" : profile.isUsuallyLight ? " (usually light)" : ""),
+        ]
+        if let read { lines.append("Prompt reads as: \(read.kind)" + (read.cue.map { " (\"\($0)\")" } ?? "")) }
+        let advice = PromptAdvisor.advise(timeline: timeline, prompt: prompt, now: now(), project: profile)
+        lines.append("Advice: " + (advice?.line ?? "none, carry on"))
+        return lines.joined(separator: "\n")
     }
 
     // MARK: state files

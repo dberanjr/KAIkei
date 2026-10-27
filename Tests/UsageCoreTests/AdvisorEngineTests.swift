@@ -83,8 +83,32 @@ import Testing
         #expect(text.contains("ctx 42%") && text.contains("$3.21"))
     }
 
+    @Test func theStatusLineIsServedFromCacheWhileNothingHasChanged() throws {
+        let fx = try Fixture(model: "claude-sonnet-5-5"); defer { fx.cleanup() }
+        let json = Data(#"{"session_id":"s1","transcript_path":"\#(fx.transcript.path)","cost":{"total_cost_usd":3.21},"context_window":{"used_percentage":42}}"#.utf8)
+        let first = fx.engine().statusLine(json, color: false)
+        // Break the cached text on disk: an unchanged transcript, minute and figures must return exactly that, without re-reading.
+        let dir = fx.state.appendingPathComponent("cache")
+        let file = try #require(try FileManager.default.contentsOfDirectory(atPath: dir.path).first { $0.hasPrefix("status-") })
+        var cached = try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent(file))) as! [String: Any]
+        cached["text"] = "from cache"
+        try JSONSerialization.data(withJSONObject: cached).write(to: dir.appendingPathComponent(file))
+        #expect(fx.engine().statusLine(json, color: false) == "from cache")
+        #expect(first != "from cache")
+        // A different cost figure is a different key.
+        let changed = Data(#"{"session_id":"s1","transcript_path":"\#(fx.transcript.path)","cost":{"total_cost_usd":4.00},"context_window":{"used_percentage":42}}"#.utf8)
+        #expect(fx.engine().statusLine(changed, color: false).contains("$4.00"))
+    }
+
     @Test func theStatusLineWithoutATranscriptIsJustTheName() {
         #expect(AdvisorEngine(stateDir: FileManager.default.temporaryDirectory).statusLine(Data("{}".utf8), color: false) == "KAIkei")
+    }
+
+    @Test func explainShowsWhatTheAdviceRestedOn() throws {
+        let fx = try Fixture(); defer { fx.cleanup() }
+        let text = fx.engine().explain(transcript: fx.transcript, prompt: "fix the typo in the README")
+        #expect(text.contains("Opus") && text.contains("light") && text.contains("typo"))
+        #expect(text.contains("/model sonnet"))
     }
 
     @Test func theProjectProfileComesFromTheOtherTranscripts() throws {

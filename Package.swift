@@ -12,6 +12,8 @@ let package = Package(
             dependencies: ["UsageCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        // The terminal side: a Claude Code hook and status line command. UsageCore only, so it starts fast.
+        .executableTarget(name: "kaikei-advise", dependencies: ["UsageCore"], path: "Sources/KAIkeiAdvise", swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "UsageCoreTests", dependencies: ["UsageCore"]),
     ]
 )
