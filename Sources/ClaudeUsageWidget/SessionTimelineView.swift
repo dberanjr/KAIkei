@@ -235,44 +235,48 @@ struct SessionTimelineView: View {
                 HStack(spacing: 6) { ForEach(TimelineSeries.allCases) { series in chip(series, g) } }
                 VStack(alignment: .leading, spacing: 5) { ForEach(TimelineSeries.allCases) { series in chip(series, g) } }
             }
-            promptOverlayToggle
-            if lanes.present.contains(where: \.canOverlay) { featureOverlayToggle }
+            featureOverlayToggle
         }
     }
 
-    /// Draws a line at every prompt on the context chart. Off by default; the prompt bar above always shows them.
-    private var promptOverlayToggle: some View {
-        Toggle(isOn: $store.promptOverlayOn) { Text("Overlay prompts on the context chart").font(.caption.weight(.semibold)) }
-            .toggleStyle(.switch).controlSize(.mini)
-    }
-
-    /// Draws the loop, sub-agent and test markers on the context chart too. Off by default; the lanes below always show them.
+    /// Draws the prompts, suggestions and the lanes' markers (loop, sub-agent, test) on the context chart too. Off by default;
+    /// the bars and lanes around the chart always show them. The chips pick what is drawn.
     private var featureOverlayToggle: some View {
         HStack(spacing: 8) {
             Toggle(isOn: $store.featureOverlayOn) { Text("Overlay lanes on the context chart").font(.caption.weight(.semibold)) }
                 .toggleStyle(.switch).controlSize(.mini)
             if store.featureOverlayOn {
+                overlayChip("Prompts", color: Theme.accent, on: $store.promptOverlayOn)
+                if !advice.isEmpty { overlayChip("Suggestions", color: Theme.caution, on: $store.suggestionOverlayOn) }
                 ForEach(lanes.present.filter(\.canOverlay)) { lane in laneChip(lane) }
             }
             Spacer(minLength: 0)
         }
     }
 
-    private func laneChip(_ lane: FeatureLane) -> some View {
-        let on = store.featureOverlayLanes.contains(lane)
-        return Button {
-            if on { store.featureOverlayLanes.remove(lane) } else { store.featureOverlayLanes.insert(lane) }
-        } label: {
+    private func overlayChip(_ title: String, color: Color, on: Binding<Bool>) -> some View {
+        chipLabel(title, color: color, on: on.wrappedValue) { on.wrappedValue.toggle() }
+    }
+
+    private func chipLabel(_ title: String, color: Color, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(lane.color)
-                Text(lane.title).fontWeight(.medium)
+                Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(color)
+                Text(title).fontWeight(.medium)
             }
             .font(.caption).lineLimit(1)
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(Capsule().fill(on ? lane.color.opacity(0.14) : Color.clear))
-            .overlay(Capsule().stroke(on ? lane.color : Color.primary.opacity(0.2), lineWidth: 1))
+            .background(Capsule().fill(on ? color.opacity(0.14) : Color.clear))
+            .overlay(Capsule().stroke(on ? color : Color.primary.opacity(0.2), lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+
+    private func laneChip(_ lane: FeatureLane) -> some View {
+        let on = store.featureOverlayLanes.contains(lane)
+        return chipLabel(lane.title, color: lane.color, on: on) {
+            if on { store.featureOverlayLanes.remove(lane) } else { store.featureOverlayLanes.insert(lane) }
+        }
     }
 
     private func chip(_ series: TimelineSeries, _ g: TimelineGeometry) -> some View {
@@ -386,7 +390,8 @@ struct SessionTimelineView: View {
             return
         }
         let target = TimelineHitTester.target(atX: Double(point.x), y: Double(point.y), width: width, bands: bands, geometry: g, lanes: lanes,
-            overlay: store.featureOverlayOn ? store.featureOverlayLanes : [], advice: advice)
+            overlay: store.featureOverlayOn ? store.featureOverlayLanes : [], advice: advice,
+            adviceOverlaid: store.featureOverlayOn && store.suggestionOverlayOn)
         let x = TimelineHitTester.x(atPixel: Double(point.x), width: width, geometry: g)
         hover.pointerMoved(to: point, target: target, focus: g.nearestCall(to: x))
     }
@@ -568,7 +573,8 @@ struct SessionTimelineView: View {
             ForEach(overlaid) { series in
                 overlayLine(series, calls: scaled, top: top, peak: peak(of: series, g), base: base, g: g)
             }
-            if store.promptOverlayOn { promptRules(g) }
+            if store.featureOverlayOn, store.promptOverlayOn { promptRules(g) }
+            if store.featureOverlayOn, store.suggestionOverlayOn { adviceOverlayMarks(g, top: top) }
             if store.featureOverlayOn { featureOverlayMarks(lanes, selected: store.featureOverlayLanes, g: g, top: top) }
             eventRules(g, labels: density.showsLabels)
         }
@@ -725,6 +731,16 @@ struct SessionTimelineView: View {
     }
 
     // MARK: shared marks
+
+    /// The suggestion icons over the context chart, a thin guide line down from each. Hover one for what it said.
+    @ChartContentBuilder private func adviceOverlayMarks(_ g: TimelineGeometry, top: Double) -> some ChartContent {
+        ForEach(advice.filter { inView(g.x(time: $0.time), g) }) { m in
+            RuleMark(x: .value("Suggestion", g.x(time: m.time)), yStart: .value("Bottom", 0), yEnd: .value("Top", top))
+                .foregroundStyle(m.level.color.opacity(0.35)).lineStyle(StrokeStyle(lineWidth: 1))
+            PointMark(x: .value("Suggestion", g.x(time: m.time)), y: .value("Icon", top * FeatureOverlayLayout.adviceIconFraction)).opacity(0)
+                .annotation(position: .overlay) { laneIcon(m.level.symbol, m.level.color) }
+        }
+    }
 
     /// A faint dashed line at every prompt you typed, over the context chart.
     @ChartContentBuilder private func promptRules(_ g: TimelineGeometry) -> some ChartContent {

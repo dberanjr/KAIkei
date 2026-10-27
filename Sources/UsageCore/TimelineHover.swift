@@ -46,7 +46,7 @@ public enum TimelineHitTester {
 
     /// What is under the pointer. Nil over gaps between panels and over empty parts of a lane.
     public static func target(atX px: Double, y: Double, width: Double, bands: [PanelBand], geometry g: TimelineGeometry, lanes: FeatureLanes? = nil,
-        overlay: Set<FeatureLane> = [], advice: [AdviceMarker] = []
+        overlay: Set<FeatureLane> = [], advice: [AdviceMarker] = [], adviceOverlaid: Bool = false
     ) -> HoverTarget? {
         guard let band = bands.first(where: { y >= $0.minY && y <= $0.maxY }) else { return nil }
         let x = Self.x(atPixel: px, width: width, geometry: g)
@@ -73,6 +73,12 @@ public enum TimelineHitTester {
             let near = advice.map { ($0, abs(pixel(forX: g.x(time: $0.time), width: width, geometry: g) - px)) }.filter { $0.1 <= tolerance }
             return near.min { $0.1 < $1.1 }.map { .advice($0.0.id) }
         case .data:
+            if band.overlay, adviceOverlaid,
+                abs((y - band.minY) - (band.maxY - band.minY) * (1 - FeatureOverlayLayout.adviceIconFraction)) <= overlayReach,
+                let hit = advice.map({ ($0, abs(pixel(forX: g.x(time: $0.time), width: width, geometry: g) - px)) })
+                    .filter({ $0.1 <= tolerance }).min(by: { $0.1 < $1.1 }) {
+                return .advice(hit.0.id)
+            }
             if band.overlay, let lanes, !overlay.isEmpty, let target = overlayTarget(lanes, selected: overlay, band: band, y: y, x: x, width: width, geometry: g) {
                 return .lane(target)
             }

@@ -100,6 +100,31 @@ import Testing
         if case .call? = hit(y: dotY, overlay: []) {} else { Issue.record("expected a call target") }
     }
 
+    func adviceHit(y: Double, overlaid: Bool) -> HoverTarget? {
+        let (lanes, g) = world()
+        let marker = AdviceMarker(id: "a1", time: Self.t0.addingTimeInterval(120), level: .consider, headline: "h", detail: "d", contextTokens: 1)
+        let width = 500.0
+        let px = TimelineHitTester.pixel(forX: g.x(time: marker.time), width: width, geometry: g)
+        let bands = [PanelBand(kind: .data, minY: 0, maxY: 200, overlay: true)]
+        return TimelineHitTester.target(
+            atX: px, y: y, width: width, bands: bands, geometry: g, lanes: lanes, overlay: [], advice: [marker], adviceOverlaid: overlaid)
+    }
+
+    @Test func aSuggestionIconOnTheOverlayOpensItsCard() {
+        let iconY = 200 * (1 - FeatureOverlayLayout.adviceIconFraction)
+        #expect(adviceHit(y: iconY, overlaid: true) == .advice("a1"))
+        #expect(adviceHit(y: iconY + 4, overlaid: true) == .advice("a1"))
+    }
+
+    @Test func awayFromTheSuggestionIconItIsTheCallAsBefore() {
+        if case .call? = adviceHit(y: 150, overlaid: true) {} else { Issue.record("expected a call target") }
+    }
+
+    @Test func withTheSuggestionOverlayOffTheIconIsNotHoverable() {
+        let iconY = 200 * (1 - FeatureOverlayLayout.adviceIconFraction)
+        if case .call? = adviceHit(y: iconY, overlaid: false) {} else { Issue.record("expected a call target") }
+    }
+
     @Test func theAdviceBarResolvesToTheNearestMarker() {
         let (_, g) = world()
         let marker = AdviceMarker(id: "a1", time: Self.t0.addingTimeInterval(120), level: .consider, headline: "h", detail: "d", contextTokens: 1)

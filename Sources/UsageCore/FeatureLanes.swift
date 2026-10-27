@@ -61,4 +61,6 @@ public struct FeatureLanes: Equatable, Sendable {
 public enum FeatureOverlayLayout {
     public static let iconFraction = 0.93
     public static let testDotFraction = 0.82
+    /// Suggestion icons ride just above the loop icons.
+    public static let adviceIconFraction = 0.97
 }

@@ -44,6 +44,9 @@ enum SnapshotMode {
         // `lanes=on` also draws the feature lanes' markers on the context chart; `lanesoverlay=` picks which (default: all).
         if arguments.contains("lanes=on") { store.featureOverlayOn = true }
         if arguments.contains("promptlines=on") { store.promptOverlayOn = true }
+        if arguments.contains("promptlines=off") { store.promptOverlayOn = false }
+        if arguments.contains("suggestions=on") { store.suggestionOverlayOn = true }
+        if arguments.contains("suggestions=off") { store.suggestionOverlayOn = false }
         if let o = arguments.first(where: { $0.hasPrefix("lanesoverlay=") })?.dropFirst(13) {
             var set = Set<FeatureLane>()
             for name in o.split(separator: ",") {

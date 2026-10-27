@@ -86,7 +86,6 @@ A session's detail page opens with a **context window and cost timeline** for de
 - a **suggestions bar** under the prompt ticks: an icon (lightbulb, warning, snowflake) wherever KAIkei's compact advisor
   would have suggested compacting, or noted that the cache had expired. They are replayed from the transcript at today's list
   prices, so you can go back and see when a suggestion would have appeared; hover one for what it said;
-- an **Overlay prompts** switch that draws a faint dashed line at every prompt you typed over the context chart;
 - a Time / Calls switch (Time shows idle gaps; Calls spaces every response evenly for long sessions);
 - for an open session, a cost-based nudge: what carrying the context costs per call, what compacting would cost and
   save, whether the cache is warm, and the extra a cold cache would add to the next prompt.
@@ -107,7 +106,7 @@ as the charts above (a session that used none of them shows nothing extra):
 - **Plugins and skills**: one bar of cost by plugin, with the smaller ones folded into "other".
 
 The **Overlay lanes on the context chart** switch (off by default, remembered) draws the loop bands and decision icons,
-sub-agent runs (as a faint full-height wash) and test-run dots on the context chart as well, with a checkbox per lane. Hovering a test dot or a loop decision icon opens its card. Hover any element for its card:
+sub-agent runs (as a faint full-height wash) and test-run dots on the context chart as well, with a checkbox per lane. Two more checkboxes, **Prompts** and **Suggestions**, draw a faint dashed line at every prompt you typed and the suggestion icons (with a guide line) on the chart. Hovering a test dot, a loop decision icon or a suggestion icon opens its card. Hover any element for its card:
 an iteration's cost, calls, tokens and how late it woke; a decision's delay and reason; a run's duration and cost; a test run's pass ratio.
 
 A `/goal` lane is not built yet: Claude Code does not document how a goal's outcome is written to the transcript, and no

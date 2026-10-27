@@ -98,8 +98,10 @@ final class UsageStore: ObservableObject {
     @Published var featureOverlayLanes: Set<FeatureLane> {
         didSet { defaults.set(featureOverlayLanes.map(\.rawValue).sorted(), forKey: "featureOverlayLanes") }
     }
-    /// Draws a faint vertical line at every prompt you typed on the context chart. Off by default.
+    /// The "Prompts" chip: while `featureOverlayOn` is set, draws a faint vertical line at every prompt you typed.
     @Published var promptOverlayOn: Bool { didSet { defaults.set(promptOverlayOn, forKey: "promptOverlayOn") } }
+    /// The "Suggestions" chip: while `featureOverlayOn` is set, draws the compact/clear suggestion icons on the context chart.
+    @Published var suggestionOverlayOn: Bool { didSet { defaults.set(suggestionOverlayOn, forKey: "suggestionOverlayOn") } }
     @Published var showSettings = false
     /// Sessions folded down to one line. Remembered across launches, by session id.
     @Published var collapsedSessions: Set<String> { didSet { defaults.set(collapsedSessions.sorted(), forKey: "collapsedSessions") } }
@@ -135,7 +137,8 @@ final class UsageStore: ObservableObject {
         featureOverlayLanes = defaults.object(forKey: "featureOverlayLanes") == nil
             ? Set(FeatureLane.allCases)
             : Set((defaults.stringArray(forKey: "featureOverlayLanes") ?? []).compactMap(FeatureLane.init(rawValue:)))
-        promptOverlayOn = defaults.object(forKey: "promptOverlayOn") as? Bool ?? false
+        promptOverlayOn = defaults.object(forKey: "promptOverlayOn") as? Bool ?? true
+        suggestionOverlayOn = defaults.object(forKey: "suggestionOverlayOn") as? Bool ?? true
         collapsedSessions = Set(defaults.stringArray(forKey: "collapsedSessions") ?? [])
         archivedSessions = Set(defaults.stringArray(forKey: "archivedSessions") ?? [])
         timelineHover.sliceDelay = hoverDelay  // after every stored property is set, so self is usable
