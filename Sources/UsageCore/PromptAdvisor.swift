@@ -193,3 +193,44 @@ public enum PromptAdvisor {
 private extension String {
     var lowercasedFirst: String { prefix(1).lowercased() + dropFirst() }
 }
+
+/// Keeps the prompt hook from nagging: the same advice is not repeated for the next few prompts unless it got more urgent.
+/// `Codable` because each prompt runs in a fresh process and the state lives in a small file.
+public struct AdviceThrottle: Codable, Equatable, Sendable {
+    var lastKey: String?
+    var lastUrgency = 0
+    var promptsSince = 0
+    static let quietPrompts = 3
+
+    public init() {}
+
+    public mutating func shouldShow(_ advice: TerminalAdvice?) -> Bool {
+        guard let advice else { lastKey = nil; return false }
+        if advice.key == lastKey, advice.urgency <= lastUrgency, promptsSince < Self.quietPrompts {
+            promptsSince += 1
+            return false
+        }
+        lastKey = advice.key; lastUrgency = advice.urgency; promptsSince = 0
+        return true
+    }
+}
+
+/// The status line segment: where the session stands in a glance, and the advice in a few words when there is some.
+public enum StatusLineText {
+    /// `cost` and `contextPercent` override the transcript's own figures, for when only the tail of a transcript was read.
+    public static func make(
+        timeline: SessionTimeline, advice: TerminalAdvice?, now: Date, color: Bool, cost: Double? = nil, contextPercent: Double? = nil
+    ) -> String {
+        guard let last = timeline.mainCalls.last else { return "KAIkei" }
+        func paint(_ code: String, _ text: String) -> String { color ? "\u{1B}[\(code)m\(text)\u{1B}[0m" : text }
+        let percent = contextPercent.map { Int($0.rounded()) }
+            ?? (timeline.contextWindow > 0 ? Int((Double(last.contextTokens) / Double(timeline.contextWindow) * 100).rounded()) : 0)
+        let left = last.time.addingTimeInterval(timeline.cacheTTL).timeIntervalSince(now)
+        let cache = left <= 0 ? "cache cold" : left < 60 ? "cache <1m" : "cache \(Int(left / 60))m"
+        var text = paint("2", "KAIkei  ctx \(percent)% · \(cache) · \(CompactAdvisor.money(cost ?? timeline.totalCost))")
+        if let advice {
+            text += " " + paint(advice.urgency >= 2 ? "1;33" : "33", "▸ \(advice.short)")
+        }
+        return text
+    }
+}
