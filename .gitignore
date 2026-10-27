@@ -15,3 +15,5 @@
 
 # Latest built app, copied here by `make app`
 /KAIkei/
+
+__pycache__/
