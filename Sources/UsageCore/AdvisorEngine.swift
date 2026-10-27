@@ -92,7 +92,7 @@ public struct AdvisorEngine {
         var throttle = loadThrottle(session: input.sessionID)
         let show = throttle.shouldShow(advice)
         saveThrottle(throttle, session: input.sessionID)
-        guard show, let advice, let json = try? JSONSerialization.data(withJSONObject: ["systemMessage": advice.line]) else { return nil }
+        guard show, let advice, let json = try? JSONSerialization.data(withJSONObject: ["systemMessage": advice.line], options: [.withoutEscapingSlashes]) else { return nil }
         return String(data: json, encoding: .utf8)
     }
 
