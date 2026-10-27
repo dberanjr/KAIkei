@@ -172,7 +172,7 @@ entry, otherwise five minutes. Prompt text is kept in memory only, for a 100-cha
 ## Commands
 
 ```
-make test      # 316 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
+make test      # 319 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
 make run       # build "KAIkei.app" and open it
 make install   # copy it to ~/Applications
 make icon      # rebuild Resources/AppIcon.icns from Resources/AppIcon-source.png (only after replacing the artwork)
