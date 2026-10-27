@@ -137,6 +137,18 @@ struct AdvisorWorld {
         #expect(PromptAdvisor.advise(timeline: t, prompt: "fix the typo in the README", now: t.mainCalls.last!.time.addingTimeInterval(60))?.model == nil)
     }
 
+    @Test func aModelCommandAfterTheLastResponseMeansYouJustSwitched() {
+        let w = world("claude-opus-5-5", light3)
+        let base = w.timeline()
+        let events = base.markers.map { m -> SessionEvent in
+            if case .prompt = m.kind { return tevent(m.id, minute: m.time.timeIntervalSince(TimelineTests.t0) / 60, .prompt(preview: "p")) }
+            return tevent(m.id, minute: 0, .prompt(preview: "p"))
+        } + [tevent("model-switch", minute: (base.mainCalls.last!.time.timeIntervalSince(TimelineTests.t0) / 60) + 0.2, .command(name: "/model"))]
+        let records = base.mainCalls.map { c in tcall(c.id, minute: c.time.timeIntervalSince(TimelineTests.t0) / 60, model: "claude-opus-5-5", read: 20_000, output: 300) }
+        let t = Timelines.build(records: records, events: events, sessionID: "s1")
+        #expect(PromptAdvisor.advise(timeline: t, prompt: "fix the typo in the README", now: w.now(t).addingTimeInterval(60))?.model == nil)
+    }
+
     @Test func aSwitchThatWouldNotPayBackSoonIsDeferredToTheNextCompactOrClear() throws {
         let advice = try #require(world("claude-opus-5-5", light3, context: 99_000).advise("fix the typo in the README"))
         #expect(advice.model?.deferred == true)

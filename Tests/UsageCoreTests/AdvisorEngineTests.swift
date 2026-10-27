@@ -104,6 +104,58 @@ import Testing
         #expect(AdvisorEngine(stateDir: FileManager.default.temporaryDirectory).statusLine(Data("{}".utf8), color: false) == "KAIkei")
     }
 
+    /// A heavy transcript last touched an hour ago, plus a light one touched just now (a session still running).
+    func addProjectTranscripts(_ fx: Fixture) throws -> (idle: URL, live: URL) {
+        func write(_ name: String, session: String, tools: Int, age: TimeInterval) throws -> URL {
+            var lines: [String] = []
+            for i in 0..<12 {
+                lines.append(promptLine("q\(i)", uuid: "\(session)u\(i)", session: session, ts: fx.ts(i)))
+                for j in 0..<tools { lines.append(assistantLine(id: "\(session)-\(i)-\(j)", session: session, ts: fx.ts(i, 10 + j), output: 100, tool: ("\(session)x\(i)-\(j)", "Bash"))) }
+            }
+            let url = fx.project.appendingPathComponent(name)
+            try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-age)], ofItemAtPath: url.path)
+            return url
+        }
+        return (try write("idle.jsonl", session: "idle", tools: 14, age: 3_600), try write("live.jsonl", session: "live", tools: 1, age: 5))
+    }
+
+    @Test func aSessionStillRunningDoesNotChangeTheProfile() throws {
+        let fx = try Fixture(); defer { fx.cleanup() }
+        let (idle, live) = try addProjectTranscripts(fx)
+        let a = fx.engine().projectProfile(for: fx.transcript)
+        #expect(a.turns == 12 && a.heavy == 12)          // only the idle one counts
+        // Two sessions in one project see the same profile, and share one cache file instead of overwriting each other's.
+        #expect(fx.engine().projectProfile(for: live) == a)
+        #expect(fx.engine().projectProfile(for: idle) == a)
+        let files = try FileManager.default.contentsOfDirectory(atPath: fx.state.appendingPathComponent("cache").path).filter { $0.hasPrefix("profile-") }
+        #expect(files.count == 1)
+    }
+
+    @Test func claudeCodesWindowSizeDecidesWhenTheWindowIsNearlyFull() throws {
+        // 170K in a 200K window is 85% full, though KAIkei's own table says 1M.
+        let fx = try Fixture(model: "claude-sonnet-5-5", turns: 3)
+        defer { fx.cleanup() }
+        var lines = try String(contentsOf: fx.transcript, encoding: .utf8).split(separator: "\n").map(String.init)
+        lines.append(assistantLine(id: "big", model: "claude-sonnet-5-5", ts: fx.ts(3), input: 2, output: 100, read: 170_000))
+        try (lines.joined(separator: "\n") + "\n").write(to: fx.transcript, atomically: true, encoding: .utf8)
+        let json = #"{"session_id":"s1","transcript_path":"\#(fx.transcript.path)","cost":{"total_cost_usd":3},"context_window":{"used_percentage":85,"context_window_size":200000}}"#
+        let engine = AdvisorEngine(stateDir: fx.state, now: { fx.lastAnswer.addingTimeInterval(10) })
+        #expect(engine.statusLine(Data(json.utf8), color: false).contains("compact: 85% full"))
+    }
+
+    @Test func oldStateFilesArePrunedAndRecentOnesKept() throws {
+        let fx = try Fixture(); defer { fx.cleanup() }
+        let state = fx.state.appendingPathComponent("state")
+        try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
+        let old = state.appendingPathComponent("throttle-old.json"), recent = state.appendingPathComponent("throttle-recent.json")
+        try Data("{}".utf8).write(to: old); try Data("{}".utf8).write(to: recent)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30 * 86_400)], ofItemAtPath: old.path)
+        _ = fx.engine().hookOutput(fx.input(prompt: "hello"))
+        #expect(!FileManager.default.fileExists(atPath: old.path))
+        #expect(FileManager.default.fileExists(atPath: recent.path))
+    }
+
     @Test func explainShowsWhatTheAdviceRestedOn() throws {
         let fx = try Fixture(); defer { fx.cleanup() }
         let text = fx.engine().explain(transcript: fx.transcript, prompt: "fix the typo in the README")
@@ -119,7 +171,9 @@ import Testing
             lines.append(promptLine("q\(i)", uuid: "v\(i)", session: "s2", ts: fx.ts(i)))
             for j in 0..<14 { lines.append(assistantLine(id: "n\(i)-\(j)", session: "s2", ts: fx.ts(i, 10 + j), output: 100, tool: ("x\(i)-\(j)", "Bash"))) }
         }
-        try (lines.joined(separator: "\n") + "\n").write(to: fx.project.appendingPathComponent("s2.jsonl"), atomically: true, encoding: .utf8)
+        let s2 = fx.project.appendingPathComponent("s2.jsonl")
+        try (lines.joined(separator: "\n") + "\n").write(to: s2, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-3_600)], ofItemAtPath: s2.path)
         let profile = fx.engine().projectProfile(for: fx.transcript)
         #expect(profile.turns >= 12 && profile.isUsuallyHeavy)
         // A second look reuses the cache file.

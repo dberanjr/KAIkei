@@ -30,7 +30,13 @@ public struct AdvisorEngine {
     public var stateDir: URL
     public var now: () -> Date
     var tailBytes = 8 * 1024 * 1024
+    /// Siblings are only sampled, so a smaller tail will do; this is what a cache miss costs.
+    var profileTailBytes = 2 * 1024 * 1024
+    /// A transcript touched more recently than this belongs to a session still running. Leaving those out keeps the profile
+    /// (and its cache signature) the same for every session in the project, so they do not keep invalidating each other.
+    var profileIdle: TimeInterval = 120
     static let profileFiles = 4
+    static let keepStateFor: TimeInterval = 14 * 86_400
 
     public init(stateDir: URL, now: @escaping () -> Date = Date.init) {
         self.stateDir = stateDir
@@ -48,6 +54,7 @@ public struct AdvisorEngine {
         var prompt: String?
         var costUSD: Double?
         var contextPercent: Double?
+        var contextWindow: Int?
     }
 
     static func parse(_ data: Data) -> Input? {
@@ -55,9 +62,11 @@ public struct AdvisorEngine {
             let session = d["session_id"] as? String, let path = d["transcript_path"] as? String
         else { return nil }
         let cost = (d["cost"] as? [String: Any])?["total_cost_usd"] as? NSNumber
-        let used = (d["context_window"] as? [String: Any])?["used_percentage"] as? NSNumber
+        let window = d["context_window"] as? [String: Any]
+        let used = window?["used_percentage"] as? NSNumber
         return Input(sessionID: session, transcript: URL(fileURLWithPath: path), prompt: d["prompt"] as? String,
-                     costUSD: cost?.doubleValue, contextPercent: used?.doubleValue)
+                     costUSD: cost?.doubleValue, contextPercent: used?.doubleValue,
+                     contextWindow: (window?["context_window_size"] as? NSNumber)?.intValue)
     }
 
     func timeline(sessionID: String, transcript: URL) -> SessionTimeline? {
@@ -78,6 +87,7 @@ public struct AdvisorEngine {
     /// Claude's context; plain stdout from this hook would be.
     public func hookOutput(_ data: Data) -> String? {
         guard let input = Self.parse(data) else { return nil }
+        pruneState()
         let advice = self.advice(for: input)
         var throttle = loadThrottle(session: input.sessionID)
         let show = throttle.shouldShow(advice)
@@ -99,7 +109,9 @@ public struct AdvisorEngine {
         struct Cached: Codable { var key: String; var text: String }
         if let cached = try? JSONDecoder().decode(Cached.self, from: Data(contentsOf: cacheURL)), cached.key == key { return cached.text }
 
-        guard let timeline = timeline(sessionID: input.sessionID, transcript: input.transcript) else { return "KAIkei" }
+        guard var timeline = timeline(sessionID: input.sessionID, transcript: input.transcript) else { return "KAIkei" }
+        // The real window size (a 200K model, say) decides when the window is nearly full; KAIkei's table only knows the common case.
+        if let window = input.contextWindow, window > 0 { timeline.contextWindow = window }
         let advice = PromptAdvisor.advise(timeline: timeline, prompt: nil, now: now(), project: projectProfile(for: input.transcript))
         // Claude Code's own cost and context figures win: the transcript tail only knows the recent part of the session.
         let text = StatusLineText.make(
@@ -132,6 +144,19 @@ public struct AdvisorEngine {
 
     // MARK: state files
 
+    /// Sessions come and go; their little state files should not pile up.
+    func pruneState() {
+        let cutoff = now().addingTimeInterval(-Self.keepStateFor)
+        for dir in ["state", "cache"] {
+            let url = stateDir.appendingPathComponent(dir)
+            for file in (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [] {
+                if let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate, modified < cutoff {
+                    try? FileManager.default.removeItem(at: file)
+                }
+            }
+        }
+    }
+
     private func throttleURL(_ session: String) -> URL { stateDir.appendingPathComponent("state/throttle-\(Self.safe(session)).json") }
 
     private func loadThrottle(session: String) -> AdviceThrottle {
@@ -153,12 +178,13 @@ public struct AdvisorEngine {
     public func projectProfile(for transcript: URL) -> ProjectProfile {
         let dir = transcript.deletingLastPathComponent()
         let siblings = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey])) ?? [])
-            .filter { $0.pathExtension == "jsonl" && $0.lastPathComponent != transcript.lastPathComponent }
+            .filter { $0.pathExtension == "jsonl" }
             .compactMap { url -> (URL, Date, Int)? in
                 let v = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
                 guard let date = v?.contentModificationDate, let size = v?.fileSize else { return nil }
                 return (url, date, size)
             }
+            .filter { Date().timeIntervalSince($0.1) >= profileIdle }
             .sorted { $0.1 > $1.1 }
             .prefix(Self.profileFiles)
         let signature = siblings.map { "\($0.0.lastPathComponent):\($0.2):\(Int($0.1.timeIntervalSince1970))" }.joined(separator: "|")
@@ -169,7 +195,7 @@ public struct AdvisorEngine {
 
         var timelines: [SessionTimeline] = []
         for (url, _, _) in siblings {
-            let store = TranscriptTail.load(url, maxBytes: tailBytes)
+            let store = TranscriptTail.load(url, maxBytes: profileTailBytes)
             for (session, records) in Dictionary(grouping: store.records, by: \.sessionID) where !records.isEmpty {
                 timelines.append(Timelines.build(records: store.records, events: store.events, sessionID: session))
             }

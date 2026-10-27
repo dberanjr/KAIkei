@@ -94,6 +94,8 @@ public enum PromptAdvisor {
         guard let tier = ModelTier(modelID: last.model) else { return nil }
         // The live model can be ahead of the transcript: you switched, and no response on the new model has landed yet.
         if let live = liveModelID.flatMap(ModelTier.init(modelID:)), live != tier { return nil }
+        // So can a /model command after the last response: the next response will be on a different model.
+        if timeline.markers.contains(where: { if case .command("/model") = $0.kind { $0.time > last.time } else { false } }) { return nil }
         // Someone who just picked this model has a reason; don't argue with it for a few responses.
         if timeline.modelSpans.count > 1, let span = timeline.modelSpans.last, span.callCount <= 3 { return nil }
 
