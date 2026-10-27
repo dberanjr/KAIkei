@@ -54,8 +54,8 @@ struct TerminalRow: View {
 
     private var host: String { row.session.entrypoint == "claude-desktop" ? "Desktop" : (row.tty ?? "terminal") }
     private var isArchived: Bool { store.archivedSessions.contains(row.id) }
-    /// An archived session being shown for restoring is always one line. A collapsed one hides everything but its title and cost.
-    private var isCollapsed: Bool { isArchived || store.collapsedSessions.contains(row.id) }
+    /// An archived session being shown for restoring is always one line. A collapsed one (the default) hides everything but its title and cost.
+    private var isCollapsed: Bool { isArchived || !store.expandedSessions.contains(row.id) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -154,6 +154,26 @@ struct TerminalRow: View {
                 HStack { Spacer(); controls }
             }
         }
+        timing
+    }
+
+    /// When the session was opened and how long it has been since Claude last answered. Ticks on its own so it stays true
+    /// between the app's refreshes.
+    private var timing: some View {
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            let started = row.session.startedAt.formatted(Date.FormatStyle().month(.abbreviated).day().hour().minute())
+            let since = row.summary.map { max(0, Int(context.date.timeIntervalSince($0.lastSeen))) }
+            HStack(spacing: 14) {
+                HStack(spacing: 4) { Text("started").foregroundStyle(.tertiary); Text(started).foregroundStyle(.secondary) }
+                if let since {
+                    HStack(spacing: 4) {
+                        Text("last turn").foregroundStyle(.tertiary)
+                        Text(since < 5 ? "just now" : "\(Fmt.duration(since)) ago").foregroundStyle(.secondary).monospacedDigit()
+                    }
+                }
+            }
+            .font(.caption).lineLimit(1)
+        }
     }
 
     private var stats: some View {
@@ -209,9 +229,9 @@ struct LiveSection: View {
             HStack {
                 Text(split.visible.count == 1 ? "1 open session" : "\(split.visible.count) open sessions").font(.headline)
                 if split.visible.count > 1 {
-                    let allCollapsed = split.visible.allSatisfy { store.collapsedSessions.contains($0.id) }
+                    let allCollapsed = split.visible.allSatisfy { !store.expandedSessions.contains($0.id) }
                     Button(allCollapsed ? "Expand all" : "Collapse all") {
-                        if allCollapsed { store.collapsedSessions.subtract(split.visible.map(\.id)) } else { store.collapsedSessions.formUnion(split.visible.map(\.id)) }
+                        if allCollapsed { store.expandedSessions.formUnion(split.visible.map(\.id)) } else { store.expandedSessions.subtract(split.visible.map(\.id)) }
                     }
                     .buttonStyle(.borderless).font(.caption).foregroundStyle(.secondary)
                 }

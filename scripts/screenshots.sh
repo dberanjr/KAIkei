@@ -18,9 +18,9 @@ export KAIKEI_HOME="$WORK/home"
 
 snap() { local name="$1"; shift; "$BIN" --snapshot "$@" >/dev/null; mv "$WORK/out.png" "$OUT/$name.png"; echo "$OUT/$name.png"; }
 
-snap dashboard-xl            XL "$WORK/out.png"
-snap dashboard-xl-dark       XL "$WORK/out.png" dark
-snap dashboard-m             M  "$WORK/out.png"
+snap dashboard-xl            XL "$WORK/out.png" expand=all
+snap dashboard-xl-dark       XL "$WORK/out.png" dark expand=all
+snap dashboard-m             M  "$WORK/out.png" expand=all
 snap session-timeline        XL "$WORK/out.png" drill=session:live height=1080
 snap session-timeline-zoom   XL "$WORK/out.png" drill=session:live height=1080 zoom=0.72-0.92
 LANES="$(cat "$WORK/home/lanes-session-id")"

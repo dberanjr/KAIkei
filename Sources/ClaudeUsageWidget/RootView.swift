@@ -184,7 +184,7 @@ struct SizedContent: View {
                 large(rows: 2, breakdown: 4, split: false, strip: true); large(rows: 2, breakdown: 3, split: false, strip: false)
                 large(rows: 1, breakdown: 3, split: false, strip: false)
             }
-        case .xlarge:
+        case .xlarge, .full:
             HStack(alignment: .top, spacing: 28) {
                 ViewThatFits(in: .vertical) {
                     xlLeft(rows: .max); xlLeft(rows: 4); xlLeft(rows: 3); xlLeft(rows: 2); xlLeft(rows: 1)
@@ -275,6 +275,8 @@ struct WindowConfigurator: NSViewRepresentable {
                 }
                 frame.origin.y += frame.height - target.height  // keep the top-left corner anchored
                 frame.size = target
+                // Full covers the usable area of the window's screen exactly, wherever the window was.
+                if size == .full, let visible = w.screen?.visibleFrame ?? NSScreen.main?.visibleFrame { frame = visible }
                 w.setFrame(frame, display: true, animate: context.coordinator.appliedSizeRequest > 0)
             }
         }

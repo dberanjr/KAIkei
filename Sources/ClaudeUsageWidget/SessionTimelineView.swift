@@ -21,7 +21,7 @@ struct TimelineDensity: Equatable {
         switch size {
         case .small, .medium: self.init(kind: .compact)
         case .large: self.init(kind: .standard)
-        case .xlarge: self.init(kind: .full)
+        case .xlarge, .full: self.init(kind: .full)
         }
     }
 

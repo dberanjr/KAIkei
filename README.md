@@ -50,7 +50,7 @@ week-over-week change, daily average, peak day and cache hit rate.
 </tr>
 <tr>
 <td align="center"><sub>XL, dark mode</sub></td>
-<td align="center"><sub>M: the essentials in a small window (S, M, L and XL, top right)</sub></td>
+<td align="center"><sub>M: the essentials in a small window (S, M, L, XL and Full, top right)</sub></td>
 </tr>
 </table>
 
@@ -144,12 +144,12 @@ one filter is stacked. The page header carries a matching "Filtered to ..." mark
 A fresh install overlays output tokens and the running cost on the context chart (cost per call keeps its own panel);
 changing it is remembered.
 
-**Open sessions** can be collapsed to one line (chevron, or Collapse all) and archived (the row's ... menu or
+**Open sessions** start collapsed to one line; open one with its chevron (or Expand all) to see its model, context, token counts, when it started and how long since its last turn. They can be archived (the row's ... menu or
 right-click). Archiving only hides a row from the list: the session keeps running, its spend still counts in the period
 totals, and a footer shows how many are archived and what they cost, with Show / Restore. Both are remembered per
 session id.
 
-Small windows (S, M) show the essentials; L adds the output and cost panels; XL adds event labels and taller charts.
+Small windows (S, M) show the essentials; L adds the output and cost panels; XL adds event labels and taller charts; Full is the XL layout stretched over the screen's usable area.
 The advice is an estimate from list prices: compacting is assumed to leave about 20K tokens until the session has
 compacted on its own (then its median is used), and the cache lifetime is an hour if the session ever wrote a 1-hour
 entry, otherwise five minutes. Prompt text is kept in memory only, for a 100-character hover preview.
@@ -180,7 +180,7 @@ make install   # copy it to ~/Applications
 make icon      # rebuild Resources/AppIcon.icns from Resources/AppIcon-source.png (only after replacing the artwork)
 ```
 
-Sizes S / M / L / XL (top right), a pin to keep it above other windows (or let it behave like a normal one),
+Sizes S / M / L / XL / Full (top right), a pin to keep it above other windows (or let it behave like a normal one),
 and a menu to show it on every desktop. Settings are remembered. `--dump` prints what the collector sees;
 `--snapshot L out.png [dark] [sessions=6] [drill=model:claude-sonnet-5-5] [height=1800]` renders a size to a PNG
 without a visible window (`sessions=N` pads the open-session list to test busy days; `drill=` opens a detail page, e.g.

@@ -2,14 +2,14 @@ import AppKit
 import SwiftUI
 import UsageCore
 
-/// `ClaudeUsageWidget --snapshot <S|M|L|XL> <out.png> [dark] [sessions=N] [drill=KIND:VALUE] [height=N] [axis=calls] [tip=call:N|prompt:N|compact:N|turn:N|model:N] [zoom=LO-HI] [overlay=output,cost,cum|all] [lanes=on] [promptlines=on] [lanesoverlay=loop,agents,tests|all] [collapse=all] [archive=N] [chart=KIND[:TAB] width=N height=N]` renders the real view hierarchy to a PNG
+/// `ClaudeUsageWidget --snapshot <S|M|L|XL|Full> <out.png> [dark] [sessions=N] [drill=KIND:VALUE] [height=N] [axis=calls] [tip=call:N|prompt:N|compact:N|turn:N|model:N] [zoom=LO-HI] [overlay=output,cost,cum|all] [lanes=on] [promptlines=on] [lanesoverlay=loop,agents,tests|all] [expand=all] [archive=N] [chart=KIND[:TAB] width=N height=N]` renders the real view hierarchy to a PNG
 /// without needing a visible window, so layouts can be reviewed (and screenshotted) headlessly.
 enum SnapshotMode {
     @MainActor static func run(arguments: [String]) {
         guard let flag = arguments.firstIndex(of: "--snapshot"), arguments.count > flag + 2,
-            let size = WidgetSize(rawValue: arguments[flag + 1].uppercased())
+            let size = WidgetSize.allCases.first(where: { $0.rawValue.caseInsensitiveCompare(arguments[flag + 1]) == .orderedSame })
         else {
-            FileHandle.standardError.write(Data("usage: --snapshot <S|M|L|XL> <out.png> [dark]\n".utf8))
+            FileHandle.standardError.write(Data("usage: --snapshot <S|M|L|XL|Full> <out.png> [dark]\n".utf8))
             return
         }
         let output = arguments[flag + 2]
@@ -66,7 +66,8 @@ enum SnapshotMode {
             store.hoverDelay = v
             print("hover delay now", store.hoverDelay, "tracker", store.timelineHover.sliceDelay)
         }
-        if arguments.contains("collapse=all") { store.collapsedSessions = Set((store.dashboard?.live ?? []).map(\.id)) }
+        // Sessions start collapsed; `expand=all` opens every one, as the README screenshots show them.
+        if arguments.contains("expand=all") { store.expandedSessions = Set((store.dashboard?.live ?? []).map(\.id)) }
         if let a = arguments.first(where: { $0.hasPrefix("archive=") }), let n = Int(a.dropFirst(8)) {
             store.archivedSessions = Set((store.dashboard?.live ?? []).prefix(n).map(\.id))
         }

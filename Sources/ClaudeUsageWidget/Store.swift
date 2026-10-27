@@ -3,10 +3,12 @@ import SwiftUI
 import UsageCore
 
 enum WidgetSize: String, CaseIterable, Identifiable {
-    case small = "S", medium = "M", large = "L", xlarge = "XL"
+    case small = "S", medium = "M", large = "L", xlarge = "XL", full = "Full"
     var id: String { rawValue }
+    /// Full fills the screen's usable area (below the menu bar, clear of the Dock), so it is not a fixed size.
     var dimensions: CGSize {
         switch self {
+        case .full: NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
         case .small: CGSize(width: 330, height: 300)
         case .medium: CGSize(width: 440, height: 520)
         case .large: CGSize(width: 580, height: 900)
@@ -104,7 +106,8 @@ final class UsageStore: ObservableObject {
     @Published var suggestionOverlayOn: Bool { didSet { defaults.set(suggestionOverlayOn, forKey: "suggestionOverlayOn") } }
     @Published var showSettings = false
     /// Sessions folded down to one line. Remembered across launches, by session id.
-    @Published var collapsedSessions: Set<String> { didSet { defaults.set(collapsedSessions.sorted(), forKey: "collapsedSessions") } }
+    /// Sessions whose details the user has opened. Every session starts collapsed to its title and cost.
+    @Published var expandedSessions: Set<String> { didSet { defaults.set(expandedSessions.sorted(), forKey: "expandedSessions") } }
     /// Sessions hidden from the open-sessions list. A display preference only: the session keeps running and its spend
     /// still counts in the totals for the period.
     @Published var archivedSessions: Set<String> { didSet { defaults.set(archivedSessions.sorted(), forKey: "archivedSessions") } }
@@ -139,7 +142,7 @@ final class UsageStore: ObservableObject {
             : Set((defaults.stringArray(forKey: "featureOverlayLanes") ?? []).compactMap(FeatureLane.init(rawValue:)))
         promptOverlayOn = defaults.object(forKey: "promptOverlayOn") as? Bool ?? true
         suggestionOverlayOn = defaults.object(forKey: "suggestionOverlayOn") as? Bool ?? true
-        collapsedSessions = Set(defaults.stringArray(forKey: "collapsedSessions") ?? [])
+        expandedSessions = Set(defaults.stringArray(forKey: "expandedSessions") ?? [])
         archivedSessions = Set(defaults.stringArray(forKey: "archivedSessions") ?? [])
         timelineHover.sliceDelay = hoverDelay  // after every stored property is set, so self is usable
     }
@@ -168,10 +171,10 @@ final class UsageStore: ObservableObject {
     }
 
     func toggleCollapsed(_ id: String) {
-        if collapsedSessions.contains(id) { collapsedSessions.remove(id) } else { collapsedSessions.insert(id) }
+        if expandedSessions.contains(id) { expandedSessions.remove(id) } else { expandedSessions.insert(id) }
     }
 
-    func archive(_ id: String) { archivedSessions.insert(id); collapsedSessions.remove(id) }
+    func archive(_ id: String) { archivedSessions.insert(id); expandedSessions.remove(id) }
 
     func restore(_ id: String) {
         archivedSessions.remove(id)
