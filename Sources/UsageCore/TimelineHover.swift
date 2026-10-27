@@ -28,6 +28,8 @@ public enum HoverTarget: Equatable, Hashable, Sendable {
     case lane(LaneTarget)
     /// A suggestion the advisor would have made, by marker id.
     case advice(String)
+    /// The end of a turn, by prompt number.
+    case turnEnd(Int)
 }
 
 public enum TimelineHitTester {
@@ -46,7 +48,8 @@ public enum TimelineHitTester {
 
     /// What is under the pointer. Nil over gaps between panels and over empty parts of a lane.
     public static func target(atX px: Double, y: Double, width: Double, bands: [PanelBand], geometry g: TimelineGeometry, lanes: FeatureLanes? = nil,
-        overlay: Set<FeatureLane> = [], advice: [AdviceMarker] = [], adviceOverlaid: Bool = false
+        overlay: Set<FeatureLane> = [], advice: [AdviceMarker] = [], adviceOverlaid: Bool = false,
+        turnEnds: [TurnEnd] = []
     ) -> HoverTarget? {
         guard let band = bands.first(where: { y >= $0.minY && y <= $0.maxY }) else { return nil }
         let x = Self.x(atPixel: px, width: width, geometry: g)
@@ -68,6 +71,11 @@ public enum TimelineHitTester {
         case .ribbon:
             return g.timeline.modelSpans.first { g.xRange(of: $0).contains(x) }.map { .modelSpan($0.id) }
         case .prompts:
+            // The lower half of the bar holds the turn-end circles; the prompt ticks run its full height.
+            if y - band.minY > (band.maxY - band.minY) / 2 {
+                let near = turnEnds.map { ($0, abs(pixel(forX: g.x(time: $0.time), width: width, geometry: g) - px)) }.filter { $0.1 <= tolerance }
+                if let end = near.min(by: { $0.1 < $1.1 }) { return .turnEnd(end.0.turn) }
+            }
             return nearestMarker(where: isDrawn)
         case .advice:
             let near = advice.map { ($0, abs(pixel(forX: g.x(time: $0.time), width: width, geometry: g) - px)) }.filter { $0.1 <= tolerance }

@@ -86,6 +86,8 @@ A session's detail page opens with a **context window and cost timeline** for de
 - a **suggestions bar** under the prompt ticks: an icon (lightbulb, warning, snowflake) wherever KAIkei's compact advisor
   would have suggested compacting, or noted that the cache had expired. They are replayed from the transcript at today's list
   prices, so you can go back and see when a suggestion would have appeared; hover one for what it said;
+- a green **turn-end** circle on the prompt bar for every answered prompt, joined to its prompt tick by a thin line; hover it for
+  "Turn N complete": duration, tool count, tokens read (↓) and written (↑), responses and cost;
 - a Time / Calls switch (Time shows idle gaps; Calls spaces every response evenly for long sessions);
 - for an open session, a cost-based nudge: what carrying the context costs per call, what compacting would cost and
   save, whether the cache is warm, and the extra a cold cache would add to the next prompt.
@@ -172,7 +174,7 @@ entry, otherwise five minutes. Prompt text is kept in memory only, for a 100-cha
 ## Commands
 
 ```
-make test      # 319 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
+make test      # 325 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
 make run       # build "KAIkei.app" and open it
 make install   # copy it to ~/Applications
 make icon      # rebuild Resources/AppIcon.icns from Resources/AppIcon-source.png (only after replacing the artwork)

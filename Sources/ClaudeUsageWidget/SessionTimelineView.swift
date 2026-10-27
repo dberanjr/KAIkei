@@ -302,6 +302,7 @@ struct SessionTimelineView: View {
     private var eventLegend: some View {
         HStack(spacing: 14) {
             line("Prompt", dash: nil, width: 1, opacity: 0.45, tall: false)
+            HStack(spacing: 5) { Image(systemName: "checkmark.circle.fill").font(.system(size: 9)).foregroundStyle(Theme.good); Text("Turn end") }
             line("Compact", dash: nil, width: 1.5, opacity: 0.8, tall: true)
             line("Clear", dash: [3, 3], width: 1.5, opacity: 0.8, tall: true)
             swatch(Color.primary.opacity(0.14), density == .compact ? "Expired" : "Cache expired")
@@ -391,7 +392,7 @@ struct SessionTimelineView: View {
         }
         let target = TimelineHitTester.target(atX: Double(point.x), y: Double(point.y), width: width, bands: bands, geometry: g, lanes: lanes,
             overlay: store.featureOverlayOn ? store.featureOverlayLanes : [], advice: advice,
-            adviceOverlaid: store.featureOverlayOn && store.suggestionOverlayOn)
+            adviceOverlaid: store.featureOverlayOn && store.suggestionOverlayOn, turnEnds: timeline.turnEnds)
         let x = TimelineHitTester.x(atPixel: Double(point.x), width: width, geometry: g)
         hover.pointerMoved(to: point, target: target, focus: g.nearestCall(to: x))
     }
@@ -515,12 +516,25 @@ struct SessionTimelineView: View {
         .frame(height: density.ribbonHeight)
     }
 
+    /// Prompts as full-height ticks, and under them each turn: a thin line from the prompt to the moment the main thread
+    /// finished answering, ending in a circle. Hover the circle for the turn's duration, tools and tokens.
     private func promptLane(_ g: TimelineGeometry) -> some View {
         let prompts = timeline.markers.filter { if case .prompt = $0.kind { inView(g.x(time: $0.time), g) } else { false } }
+        let promptTimes = timeline.markers.compactMap { m -> Date? in if case .prompt = m.kind { m.time } else { nil } }
+        let ends = timeline.turnEnds.filter { inView(g.x(time: $0.time), g) }
         return Chart {
+            ForEach(ends) { end in
+                let start = promptTimes[end.turn - 1]
+                RuleMark(xStart: .value("Prompt", g.x(time: start)), xEnd: .value("Turn end", g.x(time: end.time)), y: .value("Row", 0.25))
+                    .foregroundStyle(Theme.good.opacity(0.45)).lineStyle(StrokeStyle(lineWidth: 1))
+            }
             ForEach(prompts) { m in
                 RuleMark(x: .value("Prompt", g.x(time: m.time)), yStart: .value("Bottom", 0), yEnd: .value("Top", 1))
                     .foregroundStyle(Color.primary.opacity(0.45)).lineStyle(StrokeStyle(lineWidth: 1))
+            }
+            ForEach(ends) { end in
+                PointMark(x: .value("Turn end", g.x(time: end.time)), y: .value("Row", 0.25)).opacity(0)
+                    .annotation(position: .overlay) { Image(systemName: "checkmark.circle.fill").font(.system(size: 9)).foregroundStyle(Theme.good) }
             }
         }
         .panel(g, ticks: g.ticks(maxTicks: ticksWanted))
@@ -963,6 +977,8 @@ struct TimelineHoverOverlay: View {
             LaneCard(target: target, lanes: lanes, width: width)
         case .advice(let id):
             if let m = advice.first(where: { $0.id == id }) { AdviceCard(marker: m, width: width) }
+        case .turnEnd(let n):
+            if let end = timeline.turnEnds.first(where: { $0.turn == n }) { TurnEndCard(end: end, width: width) }
         }
     }
 
@@ -978,6 +994,7 @@ struct TimelineHoverOverlay: View {
             case .modelSpan: 120
             case .lane: 150
             case .advice: 170
+            case .turnEnd: 120
             default: 130
             }
         }()
@@ -1012,6 +1029,9 @@ struct TimelineHoverOverlay: View {
             return CGPoint(x: width / 2, y: container.height - 40)
         case .advice(let id):
             let t = advice.first { $0.id == id }?.time ?? timeline.start
+            return CGPoint(x: TimelineHitTester.pixel(forX: geometry.x(time: t), width: width, geometry: geometry), y: 40)
+        case .turnEnd(let n):
+            let t = timeline.turnEnds.first { $0.turn == n }?.time ?? timeline.start
             return CGPoint(x: TimelineHitTester.pixel(forX: geometry.x(time: t), width: width, geometry: geometry), y: 40)
         }
     }

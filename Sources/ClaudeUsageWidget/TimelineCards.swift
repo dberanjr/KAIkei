@@ -375,6 +375,32 @@ struct LaneCard: View {
 }
 
 /// Hover card for a place on the suggestions bar: what the advisor would have said, and when.
+/// What a turn amounted to, in the shape of the terminal's "turn complete" line: how long, how many tools, tokens read and written.
+struct TurnEndCard: View {
+    let end: TurnEnd
+    var width: CGFloat = 290
+
+    var body: some View {
+        CardChrome(width: width) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good)
+                    Text("Turn \(end.turn) complete").font(.callout.weight(.semibold))
+                    Spacer(minLength: 4)
+                    Text(clock(end.time)).font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                }
+                Divider()
+                Text("\(Fmt.duration(Int(end.duration))) · \(Fmt.count(end.tools, "tool")) · \(Fmt.tokens(end.inputTokens))↓ \(Fmt.tokens(end.outputTokens))↑")
+                    .font(.callout).monospacedDigit()
+                Text("\(Fmt.count(end.calls, "response")) · \(Fmt.money(end.cost)) billed")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("↓ tokens read (fresh and cached), ↑ tokens written, over the main thread's responses.")
+                    .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 struct AdviceCard: View {
     let marker: AdviceMarker
     var width: CGFloat = 290

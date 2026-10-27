@@ -67,10 +67,30 @@ public struct TurnSummary: Equatable, Sendable {
     public var end: Date
 }
 
+/// The moment the main thread finished answering prompt number `turn`, and what that turn took.
+public struct TurnEnd: Identifiable, Equatable, Sendable {
+    public var turn: Int
+    /// When the last main-thread response of the turn landed.
+    public var time: Date
+    /// From the prompt being typed to `time`.
+    public var duration: TimeInterval
+    /// Main-thread responses and tool calls in the turn.
+    public var calls: Int
+    public var tools: Int
+    /// Tokens the model read across the turn's main-thread responses (fresh and cached), and tokens it wrote.
+    public var inputTokens: Int
+    public var outputTokens: Int
+    /// Everything the turn billed, sub-agents included.
+    public var cost: Double
+    public var id: String { "turn-\(turn)" }
+}
+
 public struct SessionTimeline: Equatable, Sendable {
     /// Every response in time order, sub-agent calls included (they cost money) but flagged.
     public var calls: [CallPoint] = []
     public var markers: [TimelineMarker] = []
+    /// One per prompt that got an answer, in order.
+    public var turnEnds: [TurnEnd] = []
     public var modelSpans: [ModelSpan] = []
     /// How long a cache entry lives: an hour if the session ever wrote a 1-hour entry, otherwise five minutes.
     public var cacheTTL: TimeInterval = 300
@@ -145,6 +165,7 @@ public enum Timelines {
             timeline.calls[i].cumulativeCost = running
         }
 
+        timeline.turnEnds = turnEnds(calls: timeline.calls, promptTimes: promptTimes)
         timeline.modelSpans = spans(of: timeline.mainCalls)
         timeline.peakContext = timeline.mainCalls.map(\.contextTokens).max() ?? 0
         timeline.contextWindow = timeline.mainCalls.last.map { Pricing.lookup($0.model).rate.contextWindow } ?? 0
@@ -152,6 +173,19 @@ public enum Timelines {
         timeline.start = times.min() ?? .distantPast
         timeline.end = times.max() ?? .distantPast
         return timeline
+    }
+
+    private static func turnEnds(calls: [CallPoint], promptTimes: [Date]) -> [TurnEnd] {
+        let byTurn = Dictionary(grouping: calls.filter { $0.turn > 0 }, by: \.turn)
+        return promptTimes.indices.compactMap { i in
+            guard let turn = byTurn[i + 1] else { return nil }
+            let main = turn.filter { !$0.isSidechain }
+            guard let end = (main.isEmpty ? turn : main).map(\.time).max() else { return nil }
+            return TurnEnd(
+                turn: i + 1, time: end, duration: max(0, end.timeIntervalSince(promptTimes[i])), calls: main.count,
+                tools: main.reduce(0) { $0 + $1.tools.count }, inputTokens: main.reduce(0) { $0 + $1.contextTokens },
+                outputTokens: main.reduce(0) { $0 + $1.output }, cost: turn.reduce(0) { $0 + $1.cost })
+        }
     }
 
     private static func marker(for event: SessionEvent) -> TimelineMarker? {

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import UsageCore
 
-/// `ClaudeUsageWidget --snapshot <S|M|L|XL> <out.png> [dark] [sessions=N] [drill=KIND:VALUE] [height=N] [axis=calls] [tip=call:N|prompt:N|compact:N|model:N] [zoom=LO-HI] [overlay=output,cost,cum|all] [lanes=on] [promptlines=on] [lanesoverlay=loop,agents,tests|all] [collapse=all] [archive=N] [chart=KIND[:TAB] width=N height=N]` renders the real view hierarchy to a PNG
+/// `ClaudeUsageWidget --snapshot <S|M|L|XL> <out.png> [dark] [sessions=N] [drill=KIND:VALUE] [height=N] [axis=calls] [tip=call:N|prompt:N|compact:N|turn:N|model:N] [zoom=LO-HI] [overlay=output,cost,cum|all] [lanes=on] [promptlines=on] [lanesoverlay=loop,agents,tests|all] [collapse=all] [archive=N] [chart=KIND[:TAB] width=N height=N]` renders the real view hierarchy to a PNG
 /// without needing a visible window, so layouts can be reviewed (and screenshotted) headlessly.
 enum SnapshotMode {
     @MainActor static func run(arguments: [String]) {
@@ -218,6 +218,8 @@ enum SnapshotMode {
         case "compact":
             let compacts = timeline.markers.filter { if case .compact = $0.kind { true } else { false } }
             if n <= compacts.count { store.timelineHover.preview(.marker(compacts[n - 1].id), focus: nil) }
+        case "turn" where timeline.turnEnds.contains { $0.turn == n }:
+            store.timelineHover.preview(.turnEnd(n), focus: nil)
         case "model" where n <= timeline.modelSpans.count:
             store.timelineHover.preview(.modelSpan(timeline.modelSpans[n - 1].id), focus: nil)
         default: break
