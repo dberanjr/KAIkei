@@ -80,6 +80,8 @@ public struct TurnEnd: Identifiable, Equatable, Sendable {
     /// Tokens the model read across the turn's main-thread responses (fresh and cached), and tokens it wrote.
     public var inputTokens: Int
     public var outputTokens: Int
+    /// Extended-thinking tokens in the turn's main-thread responses (already counted inside `outputTokens`).
+    public var thinkingTokens: Int
     /// Everything the turn billed, sub-agents included.
     public var cost: Double
     public var id: String { "turn-\(turn)" }
@@ -184,7 +186,8 @@ public enum Timelines {
             return TurnEnd(
                 turn: i + 1, time: end, duration: max(0, end.timeIntervalSince(promptTimes[i])), calls: main.count,
                 tools: main.reduce(0) { $0 + $1.tools.count }, inputTokens: main.reduce(0) { $0 + $1.contextTokens },
-                outputTokens: main.reduce(0) { $0 + $1.output }, cost: turn.reduce(0) { $0 + $1.cost })
+                outputTokens: main.reduce(0) { $0 + $1.output },
+                thinkingTokens: main.reduce(0) { $0 + $1.thinkingTokens }, cost: turn.reduce(0) { $0 + $1.cost })
         }
     }
 
