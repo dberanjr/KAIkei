@@ -174,7 +174,7 @@ entry, otherwise five minutes. Prompt text is kept in memory only, for a 100-cha
 ## Commands
 
 ```
-make test      # 325 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
+make test      # 410 tests for parsing, pricing, aggregation, accounts, trends, drill-down, timelines, terminal control
 make run       # build "KAIkei.app" and open it
 make install   # copy it to ~/Applications
 make icon      # rebuild Resources/AppIcon.icns from Resources/AppIcon-source.png (only after replacing the artwork)
@@ -216,6 +216,27 @@ Everything is read locally. No login token or keychain item is read.
 - Transcripts repeat a response once per content block; the collector counts each `message.id` once.
 - The statusline bridge and Desktop "Usage" section limits (plan usage / rate limits) are **not** shown: that data
   needs your login token, which this app does not touch.
+
+## Terminal advisor
+
+A one-line nudge in the terminal you are working in, for when you have no time to think about context, cache or model.
+`make advisor` builds `kaikei-advise`, installs it at `~/.kaikei/bin/`, and adds two things to `~/.claude/settings.json`
+(a timestamped backup first; your existing status line command keeps running, wrapped; `make advisor-uninstall` reverses it):
+
+- a **prompt hook** that prints one line before Claude answers, shown to you only (it goes out as a `systemMessage`, never
+  into Claude's context) and silent when there is nothing worth saying. It does not repeat itself for the next three prompts
+  unless things got more urgent. Examples: `KAIkei ▸ /compact now: every call re-reads 300K (~$0.06).` or
+  `KAIkei ▸ Cache expired, new topic: /clear first (+$0.58 to resume 120K), then /model sonnet: light work.`
+- a **status line** segment: `KAIkei  ctx 42% · cache 4m · $3.21 ▸ compact: pays back in ~7 calls`.
+
+Model advice moves one step along Haiku, Sonnet, Opus, Fable, and is deliberately hard to trigger. A **cheaper** model is
+suggested only when the prompt itself reads as light work (a typo, a rename, a commit message) *and* the last turns were light;
+a long prompt, a prompt with code in it, or a bare "yes go ahead" never counts. A **stronger** model is suggested when the
+prompt looks hard (root cause, race condition, architecture) on Haiku or Sonnet, or after turns that were heavy. Switching
+model drops the prompt cache, so the line says what the switch costs once, and a switch that would not pay back soon is held
+for your next `/compact` or `/clear`. A model you changed in the last few responses is left alone. The project's recent
+turns (its other idle transcripts) tilt the call. Everything is a rule of thumb from list prices, and says "about".
+`kaikei-advise explain TRANSCRIPT.jsonl "your prompt"` shows what a piece of advice rested on.
 
 ## Compact and Clear buttons
 
