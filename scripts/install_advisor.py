@@ -24,6 +24,8 @@ def install(settings, binary):
     """Returns (new_settings, notes)."""
     out = json.loads(json.dumps(settings))
     notes = []
+    if not isinstance(out.get("hooks", {}), dict) or not isinstance(out.get("hooks", {}).get("UserPromptSubmit", []), list):
+        raise ValueError('"hooks" in settings.json is not the shape Claude Code writes; fix it by hand first')
     groups = out.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
     if any(is_ours(h.get("command")) for g in groups for h in g.get("hooks", [])):
         notes.append("prompt hook: already installed")
@@ -87,12 +89,21 @@ def main(argv):
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
 
+    # A dotfile manager may keep settings.json as a symlink; write through it instead of replacing it.
+    args.settings = os.path.realpath(args.settings)
+    if not args.uninstall and not (os.path.isfile(args.bin) and os.access(args.bin, os.X_OK)):
+        print(f"error: {args.bin} is not an executable file; build it first (make advisor)", file=sys.stderr)
+        return 1
     try:
         with open(args.settings) as f:
             settings = json.load(f)
     except FileNotFoundError:
         settings = {}
-    new, notes = uninstall(settings) if args.uninstall else install(settings, args.bin)
+    try:
+        new, notes = uninstall(settings) if args.uninstall else install(settings, args.bin)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     for n in notes:
         print(n)
     if new == settings:
@@ -106,7 +117,9 @@ def main(argv):
         shutil.copy2(args.settings, backup)
         print(f"backup: {backup}")
     tmp = args.settings + ".kaikei-tmp"
-    with open(tmp, "w") as f:
+    # Private from the first byte: the file can hold tokens, so it is never briefly readable by others.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         json.dump(new, f, indent=2, ensure_ascii=False)
         f.write("\n")
     if os.path.exists(args.settings):

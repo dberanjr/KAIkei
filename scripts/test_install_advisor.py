@@ -69,11 +69,54 @@ class FileTests(unittest.TestCase):
     def run_script(self, *args):
         return subprocess.run([sys.executable, "-I", os.path.join(HERE, "install_advisor.py"), *args], capture_output=True, text=True)
 
+    def make_bin(self, d):
+        path = os.path.join(d, "kaikei-advise")
+        with open(path, "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(path, 0o755)
+        return path
+
+    def test_refuses_a_binary_that_is_not_there(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "settings.json")
+            write_json(path, {"model": "sonnet"})
+            r = self.run_script("--settings", path, "--bin", os.path.join(d, "missing"))
+            self.assertNotEqual(r.returncode, 0)
+            self.assertEqual(read_json(path), {"model": "sonnet"})
+            self.assertEqual(os.listdir(d), ["settings.json"])
+
+    def test_a_symlinked_settings_file_stays_a_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            real = os.path.join(d, "dotfiles-settings.json")
+            link = os.path.join(d, "settings.json")
+            write_json(real, {"model": "sonnet"})
+            os.symlink(real, link)
+            r = self.run_script("--settings", link, "--bin", self.make_bin(d))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue(os.path.islink(link))
+            self.assertIn("UserPromptSubmit", read_json(real)["hooks"])
+
+    def test_the_file_keeps_its_permissions(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "settings.json")
+            write_json(path, {})
+            os.chmod(path, 0o600)
+            self.run_script("--settings", path, "--bin", self.make_bin(d))
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
+    def test_a_malformed_hooks_section_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "settings.json")
+            write_json(path, {"hooks": ["not", "an", "object"]})
+            r = self.run_script("--settings", path, "--bin", self.make_bin(d))
+            self.assertNotEqual(r.returncode, 0)
+            self.assertEqual(read_json(path), {"hooks": ["not", "an", "object"]})
+
     def test_writes_a_backup_and_the_new_file(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "settings.json")
             write_json(path, {"model": "sonnet"})
-            r = self.run_script("--settings", path, "--bin", BIN)
+            r = self.run_script("--settings", path, "--bin", self.make_bin(d))
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(len([f for f in os.listdir(d) if "kaikei-backup" in f]), 1)
             self.assertIn("UserPromptSubmit", read_json(path)["hooks"])

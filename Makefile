@@ -27,7 +27,7 @@ install: app
 ADVISOR_BIN = $(HOME)/.kaikei/bin/kaikei-advise
 advisor:
 	$(SWIFT) build $(FLAGS) -c release --product kaikei-advise
-	mkdir -p "$(dir $(ADVISOR_BIN))" && cp "$$($(SWIFT) build $(FLAGS) -c release --product kaikei-advise --show-bin-path)/kaikei-advise" "$(ADVISOR_BIN)" && codesign --force --sign - "$(ADVISOR_BIN)"
+	mkdir -p "$(dir $(ADVISOR_BIN))" && cp "$$($(SWIFT) build $(FLAGS) -c release --product kaikei-advise --show-bin-path)/kaikei-advise" "$(ADVISOR_BIN).new" && codesign --force --sign - "$(ADVISOR_BIN).new" && mv -f "$(ADVISOR_BIN).new" "$(ADVISOR_BIN)"
 	python3 -I scripts/install_advisor.py --bin "$(ADVISOR_BIN)"
 advisor-uninstall:
 	python3 -I scripts/install_advisor.py --bin "$(ADVISOR_BIN)" --uninstall

@@ -141,7 +141,16 @@ public enum Timelines {
 
         var timeline = SessionTimeline()
         timeline.markers = sessionEvents.compactMap(marker)
-        let promptTimes = timeline.markers.compactMap { m -> Date? in if case .prompt = m.kind { m.time } else { nil } }
+        let promptTimes = timeline.markers.compactMap { m -> Date? in if case .prompt = m.kind { m.time } else { nil } }.sorted()
+        /// How many prompts had been typed by `time`: a binary search, because a long session has tens of thousands of both.
+        func promptsTyped(by time: Date) -> Int {
+            var low = 0, high = promptTimes.count
+            while low < high {
+                let mid = (low + high) / 2
+                if promptTimes[mid] <= time { low = mid + 1 } else { high = mid }
+            }
+            return low
+        }
 
         let main = mine.filter { !$0.isSidechain }
         timeline.cacheTTL = main.contains { $0.usage.cacheWrite1h > 0 } ? 3600 : 300
@@ -158,7 +167,7 @@ public enum Timelines {
                 thinkingTokens: r.thinkingTokens, effort: r.effort, cost: r.cost(billing),
                 costParts: Pricing.costParts(of: r.usage, model: r.model, billing: billing), isSidechain: r.isSidechain,
                 idleGap: gap, cacheExpired: gap.map { $0 > timeline.cacheTTL } ?? false,
-                turn: promptTimes.filter { $0 <= r.timestamp }.count, tools: r.tools.values.sorted(), skill: r.skill, plugin: r.plugin,
+                turn: promptsTyped(by: r.timestamp), tools: r.tools.values.sorted(), skill: r.skill, plugin: r.plugin,
                 agentID: r.agentID, spawnToolUseID: r.spawnToolUseID, cumulativeCost: 0)
         }
         var running = 0.0

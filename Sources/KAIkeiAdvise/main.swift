@@ -12,37 +12,47 @@ let usage = """
 
     """
 
-// A hung transcript read must never hold up a prompt.
-DispatchQueue.global().asyncAfter(deadline: .now() + 3) { exit(0) }
+/// What the status line has collected so far, so the watchdog can print that instead of nothing.
+final class StatusParts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var previous: String?, ours: String?
+    func set(previous value: String?) { lock.lock(); previous = value; lock.unlock() }
+    func set(ours value: String) { lock.lock(); ours = value; lock.unlock() }
+    func text() -> String {
+        lock.lock(); defer { lock.unlock() }
+        return [previous.flatMap { $0.isEmpty ? nil : $0 }, ours ?? "KAIkei"].compactMap { $0 }.joined(separator: "\n")
+    }
+}
 
 let args = Array(CommandLine.arguments.dropFirst())
 let engine = AdvisorEngine(stateDir: AdvisorEngine.defaultStateDir)
+let parts = StatusParts()
+let isStatusLine = args.first == "statusline"
+
+// A hung transcript read must never hold up a prompt. A slow status line prints what it has.
+DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+    if isStatusLine { print(parts.text()) }
+    exit(0)
+}
 
 switch args.first {
 case "prompt":
     if let out = engine.hookOutput(FileHandle.standardInput.readDataToEndOfFile()) { print(out) }
 case "statusline":
     let input = FileHandle.standardInput.readDataToEndOfFile()
-    var lines: [String] = []
-    // Wrap the status line command that was there before, so it keeps working: run it on the same input and show it first.
+    // Wrap the status line command that was there before, so it keeps working: run it on the same input, alongside our own
+    // work and under its own time limit, and show it first.
+    let group = DispatchGroup()
     if let i = args.firstIndex(of: "--then"), args.indices.contains(i + 1) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", args[i + 1]]
-        let stdin = Pipe(), stdout = Pipe()
-        process.standardInput = stdin
-        process.standardOutput = stdout
-        process.standardError = FileHandle.nullDevice
-        if (try? process.run()) != nil {
-            stdin.fileHandleForWriting.write(input)
-            try? stdin.fileHandleForWriting.close()
-            let previous = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                .trimmingCharacters(in: .newlines)
-            if !previous.isEmpty { lines.append(previous) }
+        group.enter()
+        DispatchQueue.global().async {
+            parts.set(previous: ChildCommand.run(args[i + 1], input: input, timeout: 1.5))
+            group.leave()
         }
     }
-    lines.append(engine.statusLine(input, color: true))
-    print(lines.joined(separator: "\n"))
+    parts.set(ours: engine.statusLine(input, color: true))
+    group.wait()
+    print(parts.text())
 case "explain":
     guard args.count >= 2 else { FileHandle.standardError.write(Data(usage.utf8)); exit(2) }
     let prompt = args.count > 2 ? args[2...].joined(separator: " ") : nil
